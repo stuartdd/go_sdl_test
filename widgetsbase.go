@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
@@ -10,7 +11,10 @@ import (
 type SDL_Widget interface {
 	Draw(*sdl.Renderer, *ttf.Font) error
 	Inside(int32, int32) bool
+	GetRect() *sdl.Rect
 	Click(int32, int32) bool
+	SetId(int32)
+	GetId() int32
 	SetVisible(bool)
 	IsVisible() bool
 	SetEnabled(bool)
@@ -31,8 +35,51 @@ type SDL_TextWidget interface {
 	GetForeground() *sdl.Color
 }
 
+type SDL_Shape struct {
+	vx []int16
+	vy []int16
+}
+
+func NewSDLShape() *SDL_Shape {
+	return &SDL_Shape{vx: make([]int16, 0), vy: make([]int16, 0)}
+}
+
+func (s *SDL_Shape) Add(x, y int32) {
+	s.vx = append(s.vx, int16(x))
+	s.vy = append(s.vx, int16(y))
+}
+
+func (s *SDL_Shape) Len() int {
+	return len(s.vx)
+}
+
+func (s *SDL_Shape) Rect() *sdl.Rect {
+	var minx int16 = math.MaxInt16
+	var miny int16 = math.MaxInt16
+	var maxx int16 = math.MinInt16
+	var maxy int16 = math.MinInt16
+	vx := s.vx
+	vy := s.vy
+	for i := 0; i < len(vx); i++ {
+		if vx[i] < minx {
+			minx = vx[i]
+		}
+		if vx[i] > maxx {
+			maxx = vx[i]
+		}
+		if vy[i] < miny {
+			miny = vy[i]
+		}
+		if vy[i] > maxy {
+			maxy = vy[i]
+		}
+	}
+	return &sdl.Rect{X: int32(minx), Y: int32(miny), W: int32(maxx - minx), H: int32(maxy - miny)}
+}
+
 type SDL_WidgetBase struct {
 	x, y, w, h int32
+	id         int32
 	visible    bool
 	enabled    bool
 	notPressed bool
@@ -44,8 +91,8 @@ type SDL_WidgetBase struct {
 /****************************************************************************************
 * Common (base) functions for ALL SDL_Widget instances
 **/
-func initBase(x, y, w, h int32, deBounce int, bgColour, fgColour *sdl.Color) SDL_WidgetBase {
-	return SDL_WidgetBase{x: x, y: y, w: w, h: h, enabled: true, visible: true, notPressed: true, deBounce: deBounce, bg: bgColour, fg: fgColour}
+func initBase(x, y, w, h, id int32, deBounce int, bgColour, fgColour *sdl.Color) SDL_WidgetBase {
+	return SDL_WidgetBase{x: x, y: y, w: w, h: h, id: id, enabled: true, visible: true, notPressed: true, deBounce: deBounce, bg: bgColour, fg: fgColour}
 }
 
 func (b *SDL_WidgetBase) SetPosition(x, y int32) {
@@ -62,8 +109,27 @@ func (b *SDL_WidgetBase) SetSize(w, h int32) {
 	b.h = h
 }
 
+func (b *SDL_WidgetBase) GetRect() *sdl.Rect {
+	x := b.x
+	if b.w < 0 {
+		x = b.x + b.w
+	}
+	y := b.y
+	if b.h < 0 {
+		y = b.y + b.h
+	}
+	return &sdl.Rect{X: x, Y: y, W: b.w, H: b.h}
+}
+
 func (b *SDL_WidgetBase) GetSize() (int32, int32) {
 	return b.w, b.h
+}
+func (b *SDL_WidgetBase) SetId(id int32) {
+	b.id = id
+}
+
+func (b *SDL_WidgetBase) GetId() int32 {
+	return b.id
 }
 
 func (b *SDL_WidgetBase) SetVisible(v bool) {
@@ -100,21 +166,59 @@ func (b *SDL_WidgetBase) GetBackground() *sdl.Color {
 
 func (b *SDL_WidgetBase) Inside(x, y int32) bool {
 	if b.visible {
-		if x < b.x {
+		r := b.GetRect()
+		if x < r.X {
 			return false
 		}
-		if y < b.y {
+		if y < r.Y {
 			return false
 		}
-		if x > (b.x + b.w) {
+		if x > (r.X + r.W) {
 			return false
 		}
-		if y > (b.y + b.h) {
+		if y > (r.Y + r.H) {
 			return false
 		}
 		return true
 	}
 	return false
+}
+
+/****************************************************************************************
+* Container for SDL_Widgets. A list of lists
+**/
+type SDL_Widget_Groups struct {
+	wigets []*SDL_Widgets
+}
+
+func NewWidgetGroup() *SDL_Widget_Groups {
+	return &SDL_Widget_Groups{wigets: make([]*SDL_Widgets, 0)}
+}
+
+func (wl *SDL_Widget_Groups) Add(widgets *SDL_Widgets) {
+	wl.wigets = append(wl.wigets, widgets)
+}
+
+func (wl *SDL_Widget_Groups) Destroy() {
+	for _, w := range wl.wigets {
+		w.Destroy()
+	}
+}
+
+func (wl *SDL_Widget_Groups) Draw(renderer *sdl.Renderer) {
+	for _, w := range wl.wigets {
+		w.Draw(renderer)
+	}
+}
+
+func (wl *SDL_Widget_Groups) Inside(x, y int32) SDL_Widget {
+	for _, wl := range wl.wigets {
+		w := wl.Inside(x, y)
+		if w != nil {
+			return w
+		}
+	}
+	return nil
 }
 
 /****************************************************************************************
@@ -145,6 +249,18 @@ func (wl *SDL_Widgets) Inside(x, y int32) SDL_Widget {
 		}
 	}
 	return nil
+}
+
+func (wl *SDL_Widgets) SetEnable(e bool) {
+	for _, w := range wl.list {
+		w.SetEnabled(e)
+	}
+}
+
+func (wl *SDL_Widgets) SetVisible(e bool) {
+	for _, w := range wl.list {
+		w.SetVisible(e)
+	}
 }
 
 func (wl *SDL_Widgets) Draw(renderer *sdl.Renderer) {

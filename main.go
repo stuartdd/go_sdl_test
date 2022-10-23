@@ -11,22 +11,37 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
-var winTitle string = "Go-SDL2 Render"
-var winWidth, winHeight int32 = 900, 900
-var btnBg = &sdl.Color{R: 0, G: 56, B: 0, A: 128}
-var btnFg = &sdl.Color{R: 0, G: 255, B: 0, A: 255}
-var btnHeight int32 = 70
-var btnMarginTop int32 = 10
+const (
+	BUTTON_CLOSE int32 = iota
+	BUTTON_STOP_START
+	BUTTON_STEP
+	ARROW_UP
+	ARROW_DOWN
+	ARROW_LEFT
+	ARROW_RIGHT
+)
+
+var (
+	winTitle            string  = "Go-SDL2 Render"
+	winWidth, winHeight int32   = 900, 900
+	btnBg                       = &sdl.Color{R: 0, G: 56, B: 0, A: 128}
+	btnFg                       = &sdl.Color{R: 0, G: 255, B: 0, A: 255}
+	btnHeight           int32   = 70
+	btnMarginTop        int32   = 10
+	mouseX              int32   = 0
+	mouseY              int32   = 0
+	mouseOn                     = false
+	cellSize            float32 = 5
+	cellScale           float32 = 10
+	cellOffsetX         float32 = float32(btnHeight)
+	cellOffsetY         float32 = 0
+	cellX               int32
+	cellY               int32
+)
 
 func run() int {
 	var window *sdl.Window
 	var renderer *sdl.Renderer
-	var x int32
-	var y int32
-	var cellSize float32 = 5
-	var cellScale float32 = 10
-	var cellOffsetX float32 = float32(btnHeight)
-	var cellOffsetY float32 = 0
 
 	window, err := sdl.CreateWindow(winTitle, sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED,
 		winWidth, winHeight, sdl.WINDOW_SHOWN|sdl.WINDOW_RESIZABLE)
@@ -68,28 +83,34 @@ func run() int {
 	lifeGen.AddCellsAtOffset(0, 0, go_life.COLOUR_MODE_MASK, rle.Coords())
 
 	buttons := NewSDLWidgets(font)
-	defer buttons.Destroy()
 	arrows := NewSDLWidgets(nil)
-	defer arrows.Destroy()
+	widgetGroup := NewWidgetGroup()
+	widgetGroup.Add(buttons)
+	widgetGroup.Add(arrows)
+	defer widgetGroup.Destroy()
 
-	b3 := NewSDLButton(330, btnMarginTop, 150, btnHeight, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
+	b3 := NewSDLButton(330, btnMarginTop, 150, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
 		lifeGen.SetRunFor(1, nil)
 		return true
 	})
-	b1 := NewSDLButton(10, btnMarginTop, 150, btnHeight, "Quit", btnBg, btnFg, 0, func(b SDL_Widget, i1, i2 int32) bool {
+	b1 := NewSDLButton(10, btnMarginTop, 150, btnHeight, BUTTON_CLOSE, "Quit", btnBg, btnFg, 0, func(b SDL_Widget, i1, i2 int32) bool {
 		running = false
 		return true
 	})
-	b2 := NewSDLButton(170, btnMarginTop, 150, btnHeight, "Stop", btnBg, btnFg, 500, func(b SDL_Widget, i1, i2 int32) bool {
+	b2 := NewSDLButton(170, btnMarginTop, 150, btnHeight, BUTTON_STOP_START, "Stop", btnBg, btnFg, 500, func(b SDL_Widget, i1, i2 int32) bool {
 		bb := b.(*SDL_Button)
 		if lifeGen.IsRunning() {
 			lifeGen.SetRunFor(0, nil)
 			bb.SetText("Start")
 			b3.SetEnabled(true)
+			arrows.SetVisible(true)
+			mouseOn = true
 		} else {
 			lifeGen.SetRunFor(go_life.RUN_FOR_EVER, nil)
 			bb.SetText("Stop")
 			b3.SetEnabled(false)
+			arrows.SetVisible(false)
+			mouseOn = false
 		}
 		return true
 	})
@@ -98,24 +119,39 @@ func run() int {
 	buttons.Add(b2)
 	buttons.Add(b3)
 
-	a1 := NewSDLArrow(200, 300, 75, 50, 0, btnBg, btnFg, 0, nil)
-	a2 := NewSDLArrow(200, 300, -75, 50, 0, btnBg, btnFg, 0, nil)
-	a3 := NewSDLArrow(200, 300, 50, 75, 0, btnBg, btnFg, 0, nil)
-	a4 := NewSDLArrow(200, 300, 50, -75, 0, btnBg, btnFg, 0, nil)
-	arrows.Add(a1)
-	arrows.Add(a2)
-	arrows.Add(a3)
-	arrows.Add(a4)
+	arrowR := NewSDLArrow(200, 300, 75, 50, ARROW_RIGHT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		fmt.Printf("RIGHT %d\n", s.GetId())
+		return true
+	})
+	arrowL := NewSDLArrow(200, 300, -75, 50, ARROW_LEFT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		fmt.Printf("LEFT %d\n", s.GetId())
+		return true
+	})
+	arrowD := NewSDLArrow(200, 300, 50, 75, ARROW_DOWN, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		fmt.Printf("DOWN %d\n", s.GetId())
+		return true
+	})
+	arrowU := NewSDLArrow(200, 300, 50, -75, ARROW_UP, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		fmt.Printf("UP %d\n", s.GetId())
+		return true
+	})
+	arrows.Add(arrowR)
+	arrows.Add(arrowL)
+	arrows.Add(arrowD)
+	arrows.Add(arrowU)
+	arrows.SetVisible(false)
 
 	for running {
-
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 			switch t := event.(type) {
 			case *sdl.QuitEvent:
 				running = false
+			case *sdl.MouseMotionEvent:
+				mouseX = t.X
+				mouseY = t.Y
 			case *sdl.MouseButtonEvent:
 				if t.State == sdl.PRESSED {
-					w := buttons.Inside(t.X, t.Y)
+					w := widgetGroup.Inside(t.X, t.Y)
 					if w != nil {
 						go w.Click(t.X, t.Y)
 					} else {
@@ -137,16 +173,17 @@ func run() int {
 		renderer.SetDrawColor(0, 255, 255, 255)
 		cell := lifeGen.GetRootCell()
 		for cell != nil {
-			x, y = cell.XY()
-			renderer.DrawRectF(&sdl.FRect{X: cellOffsetX + float32(x)*cellScale, Y: cellOffsetY + float32(y)*cellScale, W: cellSize, H: cellSize})
+			cellX, cellY = cell.XY()
+			renderer.DrawRectF(&sdl.FRect{X: cellOffsetX + float32(cellX)*cellScale, Y: cellOffsetY + float32(cellY)*cellScale, W: cellSize, H: cellSize})
 			cell = cell.Next()
 		}
-		buttons.Draw(renderer)
-		arrows.Draw(renderer)
+		widgetGroup.Draw(renderer)
+		if mouseOn {
+			renderer.FillRect(&sdl.Rect{X: mouseX - 7, Y: mouseY - 7, W: 14, H: 14})
+		}
 		renderer.Present()
 		lifeGen.NextGen()
 	}
-
 	return 0
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"time"
 
 	"github.com/veandco/go-sdl2/gfx"
@@ -21,12 +22,16 @@ type SDL_Arrow struct {
 
 var _ SDL_Widget = (*SDL_Arrow)(nil) // Ensure SDL_Button 'is a' SDL_Widget
 
-func NewSDLArrow(x, y, w, h, dir int32, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Arrow {
+func NewSDLArrow(x, y, w, h, id int32, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Arrow {
 	but := &SDL_Arrow{onClick: onClick}
-	but.SDL_WidgetBase = initBase(x, y, w, h, deBounce, bgColour, fgColour)
+	but.SDL_WidgetBase = initBase(x, y, w, h, id, deBounce, bgColour, fgColour)
 	but.shape()
 	return but
 }
+
+// func (b *SDL_Arrow) GetRect() *sdl.Rect {
+// 	return b.rect
+// }
 
 func (b *SDL_Arrow) shape() {
 	b.vx = make([]int16, 8)
@@ -83,6 +88,33 @@ func (b *SDL_Arrow) shape() {
 		b.vx[7] = int16(b.x - qtr1W)
 		b.vy[7] = int16(b.y + thrd1H)
 	}
+	b.updatePositionSize()
+}
+
+func (b *SDL_Arrow) updatePositionSize() {
+	var minx int16 = math.MaxInt16
+	var miny int16 = math.MaxInt16
+	var maxx int16 = math.MinInt16
+	var maxy int16 = math.MinInt16
+	vx := b.vx
+	vy := b.vy
+
+	for i := 0; i < len(vx); i++ {
+		if vx[i] < minx {
+			minx = vx[i]
+		}
+		if vx[i] > maxx {
+			maxx = vx[i]
+		}
+		if vy[i] < miny {
+			miny = vy[i]
+		}
+		if vy[i] > maxy {
+			maxy = vy[i]
+		}
+	}
+	b.SetPosition(int32(minx), int32(miny))
+	b.SetSize(int32(maxx-minx), int32(maxy-miny))
 }
 
 func (b *SDL_Arrow) SetOnClick(f func(SDL_Widget, int32, int32) bool) {
@@ -112,7 +144,6 @@ func (b *SDL_Arrow) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
 		gfx.FilledPolygonColor(renderer, b.vx, b.vy, *widgetColourDim(b.bg, b.IsEnabled(), 2))
 		gfx.PolygonColor(renderer, b.vx, b.vy, *widgetColourDim(b.fg, b.IsEnabled(), 2))
-		gfx.FilledCircleColor(renderer, b.x, b.y, 5, sdl.Color{R: 255, G: 0, B: 0, A: 255})
 	}
 	return nil
 }
@@ -132,9 +163,9 @@ type SDL_Button struct {
 var _ SDL_Widget = (*SDL_Button)(nil)     // Ensure SDL_Button 'is a' SDL_Widget
 var _ SDL_TextWidget = (*SDL_Button)(nil) // Ensure SDL_Button 'is a' SDL_TextWidget
 
-func NewSDLButton(x, y, w, h int32, text string, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Button {
+func NewSDLButton(x, y, w, h, id int32, text string, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Button {
 	but := &SDL_Button{text: text, onClick: onClick}
-	but.SDL_WidgetBase = initBase(x, y, w, h, deBounce, bgColour, fgColour)
+	but.SDL_WidgetBase = initBase(x, y, w, h, id, deBounce, bgColour, fgColour)
 	return but
 }
 
