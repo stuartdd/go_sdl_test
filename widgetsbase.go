@@ -46,11 +46,7 @@ func NewSDLShape() *SDL_Shape {
 
 func (s *SDL_Shape) Add(x, y int32) {
 	s.vx = append(s.vx, int16(x))
-	s.vy = append(s.vx, int16(y))
-}
-
-func (s *SDL_Shape) Len() int {
-	return len(s.vx)
+	s.vy = append(s.vy, int16(y))
 }
 
 func (s *SDL_Shape) Rect() *sdl.Rect {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math"
 	"time"
 
 	"github.com/veandco/go-sdl2/gfx"
@@ -15,8 +14,7 @@ import (
 **/
 type SDL_Arrow struct {
 	SDL_WidgetBase
-	vx      []int16
-	vy      []int16
+	shape   *SDL_Shape
 	onClick func(SDL_Widget, int32, int32) bool
 }
 
@@ -25,7 +23,7 @@ var _ SDL_Widget = (*SDL_Arrow)(nil) // Ensure SDL_Button 'is a' SDL_Widget
 func NewSDLArrow(x, y, w, h, id int32, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Arrow {
 	but := &SDL_Arrow{onClick: onClick}
 	but.SDL_WidgetBase = initBase(x, y, w, h, id, deBounce, bgColour, fgColour)
-	but.shape()
+	but.defineShape()
 	return but
 }
 
@@ -33,89 +31,77 @@ func NewSDLArrow(x, y, w, h, id int32, bgColour, fgColour *sdl.Color, deBounce i
 // 	return b.rect
 // }
 
-func (b *SDL_Arrow) shape() {
-	b.vx = make([]int16, 8)
-	b.vy = make([]int16, 8)
-
+func (b *SDL_Arrow) defineShape() {
+	ww := b.w
+	if ww < 0 {
+		ww = ww * -1
+	}
+	hh := b.h
+	if hh < 0 {
+		hh = hh * -1
+	}
 	w := b.w
-	if w < 0 {
-		w = w * -1
-	}
 	h := b.h
-	if h < 0 {
-		h = h * -1
-	}
+	x := b.x
+	y := b.y
 
-	b.vx[0] = int16(b.x)
-	b.vy[0] = int16(b.y)
-
-	if w > h {
-		var halfH int32 = b.h / 2
-		var qtr1H int32 = b.h / 4
-		var thrd1W int32 = b.w / 3
+	sh := NewSDLShape()
+	if ww > hh {
+		var halfH int32 = h / 2
+		var qtr1H int32 = h / 4
+		var thrd1W int32 = w / 3
 		var thrd2W int32 = thrd1W * 2
-		b.vx[1] = int16(b.x + thrd1W)
-		b.vy[1] = int16(b.y - qtr1H)
-		b.vx[2] = int16(b.x + thrd2W)
-		b.vy[2] = int16(b.y - qtr1H)
-		b.vx[3] = int16(b.x + thrd2W)
-		b.vy[3] = int16(b.y - halfH)
-		b.vx[4] = int16(b.x + b.w)
-		b.vy[4] = int16(b.y)
-		b.vx[5] = int16(b.x + thrd2W)
-		b.vy[5] = int16(b.y + halfH)
-		b.vx[6] = int16(b.x + thrd2W)
-		b.vy[6] = int16(b.y + qtr1H)
-		b.vx[7] = int16(b.x + thrd1W)
-		b.vy[7] = int16(b.y + qtr1H)
+		sh.Add(x+thrd1W, y-qtr1H)
+		sh.Add(x+thrd2W, y-qtr1H)
+		sh.Add(x+thrd2W, y-halfH)
+		sh.Add(x+w, y)
+		sh.Add(x+thrd2W, y+halfH)
+		sh.Add(x+thrd2W, y+qtr1H)
+		sh.Add(x+thrd1W, y+qtr1H)
 	} else {
 		var halfW int32 = b.w / 2
 		var qtr1W int32 = b.w / 4
 		var thrd1H int32 = b.h / 3
 		var thrd2H int32 = thrd1H * 2
-		b.vx[1] = int16(b.x + qtr1W)
-		b.vy[1] = int16(b.y + thrd1H)
-		b.vx[2] = int16(b.x + qtr1W)
-		b.vy[2] = int16(b.y + thrd2H)
-		b.vx[3] = int16(b.x + halfW)
-		b.vy[3] = int16(b.y + thrd2H)
-		b.vx[4] = int16(b.x)
-		b.vy[4] = int16(b.y + b.h)
-		b.vx[5] = int16(b.x - halfW)
-		b.vy[5] = int16(b.y + thrd2H)
-		b.vx[6] = int16(b.x - qtr1W)
-		b.vy[6] = int16(b.y + thrd2H)
-		b.vx[7] = int16(b.x - qtr1W)
-		b.vy[7] = int16(b.y + thrd1H)
+		sh.Add(x+qtr1W, y+thrd1H)
+		sh.Add(x+qtr1W, y+thrd2H)
+		sh.Add(x+halfW, y+thrd2H)
+		sh.Add(x, y+h)
+		sh.Add(x-halfW, y+thrd2H)
+		sh.Add(x-qtr1W, y+thrd2H)
+		sh.Add(x-qtr1W, y+thrd1H)
 	}
-	b.updatePositionSize()
+	r := sh.Rect()
+	b.SetPosition(r.X, r.Y)
+	b.SetSize(r.W, r.H)
+	b.shape = sh
 }
 
-func (b *SDL_Arrow) updatePositionSize() {
-	var minx int16 = math.MaxInt16
-	var miny int16 = math.MaxInt16
-	var maxx int16 = math.MinInt16
-	var maxy int16 = math.MinInt16
-	vx := b.vx
-	vy := b.vy
+// func (b *SDL_Arrow) updatePositionSize() {
+// 	var minx int16 = math.MaxInt16
+// 	var miny int16 = math.MaxInt16
+// 	var maxx int16 = math.MinInt16
+// 	var maxy int16 = math.MinInt16
+// 	vx := b.vx
+// 	vy := b.vy
 
-	for i := 0; i < len(vx); i++ {
-		if vx[i] < minx {
-			minx = vx[i]
-		}
-		if vx[i] > maxx {
-			maxx = vx[i]
-		}
-		if vy[i] < miny {
-			miny = vy[i]
-		}
-		if vy[i] > maxy {
-			maxy = vy[i]
-		}
-	}
-	b.SetPosition(int32(minx), int32(miny))
-	b.SetSize(int32(maxx-minx), int32(maxy-miny))
-}
+// 	for i := 0; i < len(vx); i++ {
+// 		if vx[i] < minx {
+// 			minx = vx[i]
+// 		}
+// 		if vx[i] > maxx {
+// 			maxx = vx[i]
+// 		}
+// 		if vy[i] < miny {
+// 			miny = vy[i]
+// 		}
+// 		if vy[i] > maxy {
+// 			maxy = vy[i]
+// 		}
+// 	}
+// 	b.SetPosition(int32(minx), int32(miny))
+// 	b.SetSize(int32(maxx-minx), int32(maxy-miny))
+// }
 
 func (b *SDL_Arrow) SetOnClick(f func(SDL_Widget, int32, int32) bool) {
 	b.onClick = f
@@ -142,8 +128,8 @@ func (b *SDL_Arrow) Destroy() {
 func (b *SDL_Arrow) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 	if b.visible {
 		renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
-		gfx.FilledPolygonColor(renderer, b.vx, b.vy, *widgetColourDim(b.bg, b.IsEnabled(), 2))
-		gfx.PolygonColor(renderer, b.vx, b.vy, *widgetColourDim(b.fg, b.IsEnabled(), 2))
+		gfx.FilledPolygonColor(renderer, b.shape.vx, b.shape.vy, *widgetColourDim(b.bg, b.IsEnabled(), 2))
+		gfx.PolygonColor(renderer, b.shape.vx, b.shape.vy, *widgetColourDim(b.fg, b.IsEnabled(), 2))
 	}
 	return nil
 }

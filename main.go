@@ -139,7 +139,7 @@ func run() int {
 	arrows.Add(arrowL)
 	arrows.Add(arrowD)
 	arrows.Add(arrowU)
-	arrows.SetVisible(false)
+	arrows.SetVisible(true)
 
 	for running {
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
