@@ -119,20 +119,20 @@ func run() int {
 	buttons.Add(b2)
 	buttons.Add(b3)
 
-	arrowR := NewSDLArrow(200, 300, 75, 50, ARROW_RIGHT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
-		fmt.Printf("RIGHT %d\n", s.GetId())
+	arrowR := NewSDLArrow(600, 80, 70, 50, ARROW_RIGHT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		cellOffsetX = cellOffsetX + 100
 		return true
 	})
-	arrowL := NewSDLArrow(200, 300, -75, 50, ARROW_LEFT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
-		fmt.Printf("LEFT %d\n", s.GetId())
+	arrowL := NewSDLArrow(600, 80, -70, 50, ARROW_LEFT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		cellOffsetX = cellOffsetX - 100
 		return true
 	})
-	arrowD := NewSDLArrow(200, 300, 50, 75, ARROW_DOWN, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
-		fmt.Printf("DOWN %d\n", s.GetId())
+	arrowD := NewSDLArrow(600, 80, 50, 70, ARROW_DOWN, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		cellOffsetY = cellOffsetY + 100
 		return true
 	})
-	arrowU := NewSDLArrow(200, 300, 50, -75, ARROW_UP, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
-		fmt.Printf("UP %d\n", s.GetId())
+	arrowU := NewSDLArrow(600, 80, 50, -70, ARROW_UP, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		cellOffsetY = cellOffsetY - 100
 		return true
 	})
 	arrows.Add(arrowR)

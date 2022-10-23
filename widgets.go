@@ -49,8 +49,8 @@ func (b *SDL_Arrow) defineShape() {
 	if ww > hh {
 		var halfH int32 = h / 2
 		var qtr1H int32 = h / 4
-		var thrd1W int32 = w / 3
-		var thrd2W int32 = thrd1W * 2
+		var thrd1W int32 = w / 6
+		var thrd2W int32 = thrd1W * 4
 		sh.Add(x+thrd1W, y-qtr1H)
 		sh.Add(x+thrd2W, y-qtr1H)
 		sh.Add(x+thrd2W, y-halfH)
@@ -61,8 +61,8 @@ func (b *SDL_Arrow) defineShape() {
 	} else {
 		var halfW int32 = b.w / 2
 		var qtr1W int32 = b.w / 4
-		var thrd1H int32 = b.h / 3
-		var thrd2H int32 = thrd1H * 2
+		var thrd1H int32 = b.h / 6
+		var thrd2H int32 = thrd1H * 4
 		sh.Add(x+qtr1W, y+thrd1H)
 		sh.Add(x+qtr1W, y+thrd2H)
 		sh.Add(x+halfW, y+thrd2H)
