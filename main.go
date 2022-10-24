@@ -67,7 +67,7 @@ func run() int {
 		return 1
 	}
 	defer ttf.Quit()
-	font, err := ttf.OpenFont("Garuda-BoldOblique.ttf", 50)
+	font, err := ttf.OpenFont("resources/Garuda-BoldOblique.ttf", 50)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load the font: %s\n", err)
 		return 1
@@ -87,10 +87,16 @@ func run() int {
 
 	buttons := NewSDLWidgets(font)
 	arrows := NewSDLWidgets(nil)
+	images := NewSDLWidgets(nil)
 	widgetGroup := NewWidgetGroup()
 	widgetGroup.Add(buttons)
 	widgetGroup.Add(arrows)
+	widgetGroup.Add(images)
 	defer widgetGroup.Destroy()
+
+	images.LoadTextures(renderer, "resources", map[string]string{
+		"lem": "Apollo_LM.bmp",
+	})
 
 	b3 := NewSDLButton(330, btnMarginTop, buttonWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
 		lifeGen.SetRunFor(1, nil)
@@ -144,6 +150,12 @@ func run() int {
 	arrows.Add(arrowU)
 	arrows.SetVisible(false)
 
+	lem, lemRect, err := images.GetTexture("lem")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load 'lem': %s\n", err)
+		return 1
+	}
+
 	for running {
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 			switch t := event.(type) {
@@ -188,8 +200,9 @@ func run() int {
 		if mouseOn {
 			renderer.FillRect(&sdl.Rect{X: mouseX - (cellSize / 2), Y: mouseY - (cellSize / 2), W: cellSize, H: cellSize})
 		}
-		renderer.Present()
+		renderer.Copy(lem, nil, &sdl.Rect{X: 400, Y: 400, W: lemRect.W, H: lemRect.H})
 		lifeGen.NextGen()
+		renderer.Present()
 	}
 	return 0
 }

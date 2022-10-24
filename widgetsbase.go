@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
@@ -230,6 +231,36 @@ func NewSDLWidgets(font *ttf.Font) *SDL_Widgets {
 	return &SDL_Widgets{textureCache: NewTextureCache(), list: make([]SDL_Widget, 0), font: font}
 }
 
+func (wl *SDL_Widgets) LoadTextures(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
+	if wl.textureCache == nil {
+		wl.textureCache = NewTextureCache()
+	}
+	for name, fileName := range fileNames {
+		var fn string
+		if applicationDataPath == "" {
+			fn = fileName
+		} else {
+			fn = filepath.Join(applicationDataPath, fileName)
+		}
+		texture, rect, err := loadTextureFile(renderer, fn)
+		if err != nil {
+			return err
+		}
+		wl.textureCache.textureMap[name] = &SDL_TextureCacheEntry{name: name, texture: texture, clipRect: *rect}
+	}
+	return nil
+}
+func (wl *SDL_Widgets) GetTexture(name string) (*sdl.Texture, *sdl.Rect, error) {
+	if wl.textureCache == nil {
+		return nil, nil, fmt.Errorf("Texture cache is not set up")
+	}
+	tce := wl.textureCache.textureMap[name]
+	if tce == nil {
+		return nil, nil, fmt.Errorf("Texture cache does not contain %s", name)
+	}
+	return tce.texture, &tce.clipRect, nil
+}
+
 func (wl *SDL_Widgets) Add(widget SDL_Widget) {
 	tw, ok := widget.(SDL_TextWidget)
 	if ok {
@@ -294,6 +325,7 @@ func (wl *SDL_Widgets) Destroy() {
 type SDL_TextureCacheEntry struct {
 	clipRect sdl.Rect
 	texture  *sdl.Texture
+	name     string
 }
 
 func (tce *SDL_TextureCacheEntry) Destroy() {
@@ -324,6 +356,20 @@ func (wl *SDL_TextureCache) Destroy() {
 * widgetColourBright takes a colour and returns a brighter by same colour. Used for Widget Borders
 *
 **/
+func loadTextureFile(renderer *sdl.Renderer, fileName string) (*sdl.Texture, *sdl.Rect, error) {
+	surface, err := sdl.LoadBMP(fileName)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer surface.Free()
+	cRect := &surface.ClipRect
+	texture, err := renderer.CreateTextureFromSurface(surface)
+	if err != nil {
+		return nil, nil, err
+	}
+	return texture, &sdl.Rect{X: cRect.X, Y: cRect.Y, W: cRect.W, H: cRect.H}, nil
+}
+
 func getCachedTextWidgetEntry(renderer *sdl.Renderer, tw SDL_TextWidget, font *ttf.Font) (*SDL_TextureCacheEntry, error) {
 	// cache key must include Dim variations of the textures
 	var cacheKey = fmt.Sprintf("%s%t", tw.GetText(), tw.IsEnabled())
