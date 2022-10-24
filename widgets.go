@@ -77,32 +77,6 @@ func (b *SDL_Arrow) defineShape() {
 	b.shape = sh
 }
 
-// func (b *SDL_Arrow) updatePositionSize() {
-// 	var minx int16 = math.MaxInt16
-// 	var miny int16 = math.MaxInt16
-// 	var maxx int16 = math.MinInt16
-// 	var maxy int16 = math.MinInt16
-// 	vx := b.vx
-// 	vy := b.vy
-
-// 	for i := 0; i < len(vx); i++ {
-// 		if vx[i] < minx {
-// 			minx = vx[i]
-// 		}
-// 		if vx[i] > maxx {
-// 			maxx = vx[i]
-// 		}
-// 		if vy[i] < miny {
-// 			miny = vy[i]
-// 		}
-// 		if vy[i] > maxy {
-// 			maxy = vy[i]
-// 		}
-// 	}
-// 	b.SetPosition(int32(minx), int32(miny))
-// 	b.SetSize(int32(maxx-minx), int32(maxy-miny))
-// }
-
 func (b *SDL_Arrow) SetOnClick(f func(SDL_Widget, int32, int32) bool) {
 	b.onClick = f
 }
@@ -132,6 +106,65 @@ func (b *SDL_Arrow) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		gfx.PolygonColor(renderer, b.shape.vx, b.shape.vy, *widgetColourDim(b.fg, b.IsEnabled(), 2))
 	}
 	return nil
+}
+
+/****************************************************************************************
+* SDL_Image code
+* Implements SDL_Widget cos it is one!
+* Implements SDL_TextWidget because it has text and uses the texture cache
+**/
+
+type SDL_Image struct {
+	SDL_WidgetBase
+	textureName  string
+	textureCache *SDL_TextureCache
+	onClick      func(SDL_Widget, int32, int32) bool
+}
+
+var _ SDL_Widget = (*SDL_Image)(nil) // Ensure SDL_Button 'is a' SDL_Widget
+func NewSDLImage(x, y, w, h, id int32, textureName string, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Image {
+	but := &SDL_Image{textureName: textureName, onClick: onClick}
+	but.SDL_WidgetBase = initBase(x, y, w, h, id, deBounce, bgColour, fgColour)
+	return but
+}
+
+func (b *SDL_Image) SetTextureCache(tc *SDL_TextureCache) {
+	b.textureCache = tc
+}
+
+func (b *SDL_Image) GetTextureCache() *SDL_TextureCache {
+	return b.textureCache
+}
+
+func (b *SDL_Image) Click(x, y int32) bool {
+	if b.enabled && b.visible && b.notPressed && b.onClick != nil {
+		if b.deBounce > 0 {
+			b.notPressed = false
+			defer func() {
+				time.Sleep(time.Millisecond * time.Duration(b.deBounce))
+				b.notPressed = true
+			}()
+		}
+		return b.onClick(b, x, y)
+	}
+	return false
+}
+
+func (b *SDL_Image) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
+	if b.visible {
+		renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
+		image, rect, err := b.textureCache.GetTexture(b.textureName)
+		if err != nil {
+			// draw red cross!
+			return nil
+		}
+		renderer.Copy(image, nil, &sdl.Rect{X: b.x, Y: b.y, W: rect.W, H: rect.H})
+	}
+	return nil
+}
+
+func (b *SDL_Image) Destroy() {
+	// Image cache takes care of all images!
 }
 
 /****************************************************************************************
@@ -207,7 +240,7 @@ func (b *SDL_Button) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		renderer.DrawRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
 		renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 2, H: b.h - 2})
 
-		// get data from the cache entry
+		// get/create data from the cache entry
 		ctwe, err := getCachedTextWidgetEntry(renderer, b, font)
 		if err != nil {
 			return err

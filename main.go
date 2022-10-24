@@ -85,18 +85,17 @@ func run() int {
 	lifeGen := go_life.NewLifeGen(func(lg *go_life.LifeGen) {}, go_life.RUN_FOR_EVER)
 	lifeGen.AddCellsAtOffset(0, 0, go_life.COLOUR_MODE_MASK, rle.Coords())
 
-	buttons := NewSDLWidgets(font)
-	arrows := NewSDLWidgets(nil)
-	images := NewSDLWidgets(nil)
+	buttons := NewSDLWidgetList(font)
+	arrows := NewSDLWidgetList(nil)
+	images := NewSDLWidgetList(nil)
 	widgetGroup := NewWidgetGroup()
 	widgetGroup.Add(buttons)
 	widgetGroup.Add(arrows)
 	widgetGroup.Add(images)
-	defer widgetGroup.Destroy()
-
-	images.LoadTextures(renderer, "resources", map[string]string{
+	widgetGroup.LoadTextures(renderer, "resources", map[string]string{
 		"lem": "Apollo_LM.bmp",
 	})
+	defer widgetGroup.Destroy()
 
 	b3 := NewSDLButton(330, btnMarginTop, buttonWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
 		lifeGen.SetRunFor(1, nil)
@@ -150,7 +149,9 @@ func run() int {
 	arrows.Add(arrowU)
 	arrows.SetVisible(false)
 
-	lem, lemRect, err := images.GetTexture("lem")
+	lem := NewSDLImage(400, 400, 0, 0, 999, "lem", btnBg, btnFg, 10, nil)
+	images.Add(lem)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load 'lem': %s\n", err)
 		return 1
@@ -196,11 +197,11 @@ func run() int {
 			}
 			cell = cell.Next()
 		}
+		lem.SetPosition(mouseX, mouseY)
 		widgetGroup.Draw(renderer)
 		if mouseOn {
 			renderer.FillRect(&sdl.Rect{X: mouseX - (cellSize / 2), Y: mouseY - (cellSize / 2), W: cellSize, H: cellSize})
 		}
-		renderer.Copy(lem, nil, &sdl.Rect{X: 400, Y: 400, W: lemRect.W, H: lemRect.H})
 		lifeGen.NextGen()
 		renderer.Present()
 	}
