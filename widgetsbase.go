@@ -32,6 +32,7 @@ type SDL_TextWidget interface {
 	GetTextureCache() *SDL_TextureCache
 	SetText(text string)
 	GetText() string
+	GetId() int32
 	IsEnabled() bool
 	GetForeground() *sdl.Color
 }
@@ -372,7 +373,7 @@ func loadTextureFile(renderer *sdl.Renderer, fileName string) (*sdl.Texture, *sd
 
 func getCachedTextWidgetEntry(renderer *sdl.Renderer, tw SDL_TextWidget, font *ttf.Font) (*SDL_TextureCacheEntry, error) {
 	// cache key must include Dim variations of the textures
-	var cacheKey = fmt.Sprintf("%s%t", tw.GetText(), tw.IsEnabled())
+	var cacheKey = fmt.Sprintf("text.%d.%s%t", tw.GetId(), tw.GetText(), tw.IsEnabled())
 	var cacheDataEntry *SDL_TextureCacheEntry
 	tc := tw.GetTextureCache()
 
@@ -394,7 +395,7 @@ func getCachedTextWidgetEntry(renderer *sdl.Renderer, tw SDL_TextWidget, font *t
 			return nil, err
 		}
 		// Crteate a new cache data
-		cacheDataEntry = &SDL_TextureCacheEntry{texture: txt, clipRect: clip}
+		cacheDataEntry = &SDL_TextureCacheEntry{texture: txt, clipRect: clip, name: cacheKey}
 		// If there is a texture cache then add the cache entry ti it
 		if tc != nil {
 			tc.textureMap[cacheKey] = cacheDataEntry
