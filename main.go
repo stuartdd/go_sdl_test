@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 
 	"github.com/stuartdd/go_life"
 	"github.com/veandco/go-sdl2/sdl"
@@ -15,6 +16,8 @@ const (
 	BUTTON_CLOSE int32 = iota
 	BUTTON_STOP_START
 	BUTTON_STEP
+	BUTTON_FASTER
+	BUTTON_SLOWER
 	ARROW_UP
 	ARROW_DOWN
 	ARROW_LEFT
@@ -22,6 +25,7 @@ const (
 )
 
 var (
+	resources           string = "resources"
 	winTitle            string = "Go-SDL2 Render"
 	winWidth, winHeight int32  = 900, 900
 	btnBg                      = &sdl.Color{R: 0, G: 56, B: 0, A: 128}
@@ -31,6 +35,7 @@ var (
 	mouseX              int32  = 0
 	mouseY              int32  = 0
 	mouseOn                    = false
+	loopDelay           int    = 0
 	cellSize            int32  = 5
 	cellScale           int32  = 10
 	cellOffsetX         int32  = btnHeight
@@ -40,6 +45,7 @@ var (
 	arrowPosX           int32 = 245
 	arrowPosY           int32 = 180
 	buttonWidth         int32 = 150
+	buttonGap           int32 = 10
 )
 
 func run() int {
@@ -67,7 +73,7 @@ func run() int {
 		return 1
 	}
 	defer ttf.Quit()
-	font, err := ttf.OpenFont("resources/Garuda-BoldOblique.ttf", 50)
+	font, err := ttf.OpenFont(path.Join(resources, "buttonFont.ttf"), 50)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load the font: %s\n", err)
 		return 1
@@ -87,46 +93,71 @@ func run() int {
 
 	buttons := NewSDLWidgetList(font)
 	arrows := NewSDLWidgetList(nil)
-	images := NewSDLWidgetList(nil)
 	widgetGroup := NewWidgetGroup()
 	widgetGroup.Add(buttons)
 	widgetGroup.Add(arrows)
-	widgetGroup.Add(images)
-	widgetGroup.LoadTextures(renderer, "resources", map[string]string{
-		"lem": "Apollo_LM.bmp",
+	err = widgetGroup.LoadTextures(renderer, resources, map[string]string{
+		"lem":    "lem.png",
+		"slower": "slower.png",
+		"faster": "faster.png",
 	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load textures: %s\n", err)
+		return 1
+	}
 	defer widgetGroup.Destroy()
 
-	b3 := NewSDLButton(330, btnMarginTop, buttonWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
-		lifeGen.SetRunFor(1, nil)
+	var btnStep *SDL_Button
+	btnSlower := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_SLOWER, "slower", btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		loopDelay = loopDelay + 5
 		return true
 	})
-	b1 := NewSDLButton(10, btnMarginTop, buttonWidth, btnHeight, BUTTON_CLOSE, "Quit", btnBg, btnFg, 0, func(b SDL_Widget, i1, i2 int32) bool {
+	btnFaster := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_FASTER, "faster", btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		loopDelay = loopDelay - 10
+		if loopDelay < 0 {
+			loopDelay = 0
+		}
+		return true
+	})
+	btnClose := NewSDLButton(10, btnMarginTop, buttonWidth, btnHeight, BUTTON_CLOSE, "Quit", btnBg, btnFg, 0, func(b SDL_Widget, i1, i2 int32) bool {
 		running = false
 		return true
 	})
-	b2 := NewSDLButton(170, btnMarginTop, buttonWidth, btnHeight, BUTTON_STOP_START, "Stop", btnBg, btnFg, 500, func(b SDL_Widget, i1, i2 int32) bool {
+
+	btnStop := NewSDLButton(170, btnMarginTop, buttonWidth, btnHeight, BUTTON_STOP_START, "Stop", btnBg, btnFg, 500, func(b SDL_Widget, i1, i2 int32) bool {
 		bb := b.(*SDL_Button)
 		if lifeGen.IsRunning() {
 			lifeGen.SetRunFor(0, nil)
 			bb.SetText("Start")
-			b3.SetEnabled(true)
+			btnStep.SetVisible(true)
+			btnSlower.SetVisible(false)
+			btnFaster.SetVisible(false)
 			arrows.SetVisible(true)
 			mouseOn = true
 		} else {
 			lifeGen.SetRunFor(go_life.RUN_FOR_EVER, nil)
 			bb.SetText("Stop")
-			b3.SetEnabled(false)
+			btnStep.SetVisible(false)
+			btnSlower.SetVisible(true)
+			btnFaster.SetVisible(true)
 			arrows.SetVisible(false)
 			mouseOn = false
 		}
+		buttons.ArrangeLR(buttonGap)
 		return true
 	})
-	b3.SetEnabled(false)
-	buttons.Add(b1)
-	buttons.Add(b2)
-	buttons.Add(b3)
 
+	btnStep = NewSDLButton(330, btnMarginTop, buttonWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
+		lifeGen.SetRunFor(1, nil)
+		return true
+	})
+	btnStep.SetVisible(false)
+	buttons.Add(btnClose)
+	buttons.Add(btnStop)
+	buttons.Add(btnSlower)
+	buttons.Add(btnFaster)
+	buttons.Add(btnStep)
+	buttons.ArrangeTB(buttonGap)
 	arrowR := NewSDLArrow(arrowPosX, arrowPosY, 70, 50, ARROW_RIGHT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
 		cellOffsetX = cellOffsetX + 100
 		return true
@@ -148,9 +179,6 @@ func run() int {
 	arrows.Add(arrowD)
 	arrows.Add(arrowU)
 	arrows.SetVisible(false)
-
-	lem := NewSDLImage(400, 400, 0, 0, 999, "lem", btnBg, btnFg, 10, nil)
-	images.Add(lem)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load 'lem': %s\n", err)
@@ -197,13 +225,13 @@ func run() int {
 			}
 			cell = cell.Next()
 		}
-		lem.SetPosition(mouseX, mouseY)
 		widgetGroup.Draw(renderer)
 		if mouseOn {
 			renderer.FillRect(&sdl.Rect{X: mouseX - (cellSize / 2), Y: mouseY - (cellSize / 2), W: cellSize, H: cellSize})
 		}
 		lifeGen.NextGen()
 		renderer.Present()
+		sdl.Delay(uint32(loopDelay))
 	}
 	return 0
 }

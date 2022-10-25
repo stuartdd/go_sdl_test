@@ -5,6 +5,7 @@ import (
 	"math"
 	"path/filepath"
 
+	"github.com/veandco/go-sdl2/img"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
@@ -23,6 +24,7 @@ type SDL_Widget interface {
 	IsEnabled() bool             // Base
 	SetPosition(int32, int32)    // Base
 	GetPosition() (int32, int32) // Base
+	GetNextPosition() *sdl.Rect  // Base
 	SetSize(int32, int32)        // Base
 	GetSize() (int32, int32)     // Base
 	Destroy()                    // Base
@@ -111,6 +113,10 @@ func (b *SDL_WidgetBase) GetPosition() (int32, int32) {
 func (b *SDL_WidgetBase) SetSize(w, h int32) {
 	b.w = w
 	b.h = h
+}
+
+func (b *SDL_WidgetBase) GetNextPosition() *sdl.Rect {
+	return &sdl.Rect{X: b.x + b.w, Y: b.y + b.h, W: b.w, H: b.h}
 }
 
 func (b *SDL_WidgetBase) GetRect() *sdl.Rect {
@@ -298,6 +304,45 @@ func (wl *SDL_WidgetList) Inside(x, y int32) SDL_Widget {
 	return nil
 }
 
+func (wl *SDL_WidgetList) ArrangeLR(padding int32) {
+	var y int32
+	var w int32
+	var x int32
+	first := true
+	for _, wid := range wl.list {
+		if wid.IsVisible() {
+			if first {
+				first = false
+				x, y = wid.GetPosition()
+				w, _ = wid.GetSize()
+			} else {
+				x = x + w + padding
+				wid.SetPosition(x, y)
+				w, _ = wid.GetSize()
+			}
+		}
+	}
+}
+func (wl *SDL_WidgetList) ArrangeTB(padding int32) {
+	var x int32
+	var y int32
+	var h int32
+	first := true
+	for _, wid := range wl.list {
+		if wid.IsVisible() {
+			if first {
+				first = false
+				_, h = wid.GetSize()
+				x, y = wid.GetPosition()
+			} else {
+				y = y + h + padding
+				wid.SetPosition(x, y)
+				_, h = wid.GetSize()
+			}
+		}
+	}
+}
+
 func (wl *SDL_WidgetList) SetEnable(e bool) {
 	for _, w := range wl.list {
 		w.SetEnabled(e)
@@ -394,7 +439,7 @@ func (tc *SDL_TextureCache) LoadTextures(renderer *sdl.Renderer, applicationData
 		}
 		texture, rect, err := loadTextureFile(renderer, fn)
 		if err != nil {
-			return err
+			return fmt.Errorf("file '%s':%s", fileName, err.Error())
 		}
 		tc.textureMap[name] = &SDL_TextureCacheEntry{name: name, texture: texture, clipRect: *rect}
 	}
@@ -418,17 +463,15 @@ func (tc *SDL_TextureCache) GetTexture(name string) (*sdl.Texture, *sdl.Rect, er
 *
 **/
 func loadTextureFile(renderer *sdl.Renderer, fileName string) (*sdl.Texture, *sdl.Rect, error) {
-	surface, err := sdl.LoadBMP(fileName)
+	texture, err := img.LoadTexture(renderer, fileName)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer surface.Free()
-	cRect := &surface.ClipRect
-	texture, err := renderer.CreateTextureFromSurface(surface)
+	_, _, t3, t4, err := texture.Query()
 	if err != nil {
 		return nil, nil, err
 	}
-	return texture, &sdl.Rect{X: cRect.X, Y: cRect.Y, W: cRect.W, H: cRect.H}, nil
+	return texture, &sdl.Rect{X: 0, Y: 0, W: t3, H: t4}, nil
 }
 
 // Get a SDL_TextureCacheEntry from the cache specifically for a SDL_TextWidget. Add one if it does not exist
@@ -471,7 +514,17 @@ func getCachedTextWidgetEntry(renderer *sdl.Renderer, tw SDL_TextWidget, font *t
 	return cacheDataEntry, nil
 }
 
+func widgetShrinkRect(in *sdl.Rect, by int32) *sdl.Rect {
+	if in == nil {
+		return nil
+	}
+	return &sdl.Rect{X: in.X + by, Y: in.Y + by, W: in.W - (by * 2), H: in.H - (by * 2)}
+}
+
 func widgetColourDim(in *sdl.Color, doNothing bool, divBy uint8) *sdl.Color {
+	if in == nil {
+		return nil
+	}
 	r := in.R
 	g := in.G
 	b := in.B
@@ -490,6 +543,9 @@ func widgetColourDim(in *sdl.Color, doNothing bool, divBy uint8) *sdl.Color {
 }
 
 func widgetColourBright(in *sdl.Color, doNothing bool) *sdl.Color {
+	if in == nil {
+		return nil
+	}
 	r := in.R
 	g := in.G
 	b := in.B

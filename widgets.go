@@ -113,7 +113,6 @@ func (b *SDL_Arrow) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 * Implements SDL_Widget cos it is one!
 * Implements SDL_TextWidget because it has text and uses the texture cache
 **/
-
 type SDL_Image struct {
 	SDL_WidgetBase
 	textureName  string
@@ -152,13 +151,38 @@ func (b *SDL_Image) Click(x, y int32) bool {
 
 func (b *SDL_Image) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 	if b.visible {
-		renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
-		image, rect, err := b.textureCache.GetTexture(b.textureName)
+		br := &sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h}
+		ir := &sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h}
+		var bg *sdl.Color = nil
+		var fg *sdl.Color = nil
+		if b.IsEnabled() {
+			fg = b.fg
+			bg = b.bg
+		} else {
+			ir = widgetShrinkRect(ir, 4)
+			fg = widgetColourDim(b.fg, false, 2)
+		}
+		if bg != nil {
+			// Background
+			renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
+			renderer.FillRect(br)
+			ir = widgetShrinkRect(ir, 8)
+		}
+		image, _, err := b.textureCache.GetTexture(b.textureName)
 		if err != nil {
-			// draw red cross!
+			renderer.SetDrawColor(255, 0, 0, 255)
+			renderer.DrawRect(&sdl.Rect{X: b.x, Y: b.y, W: 100, H: 100})
 			return nil
 		}
-		renderer.Copy(image, nil, &sdl.Rect{X: b.x, Y: b.y, W: rect.W, H: rect.H})
+		if bg != nil || fg != nil {
+			ir = widgetShrinkRect(ir, 8)
+		}
+		renderer.Copy(image, nil, ir)
+		// Border
+		if fg != nil {
+			renderer.SetDrawColor(fg.R, fg.G, fg.B, fg.A)
+			renderer.DrawRect(br)
+		}
 	}
 	return nil
 }
