@@ -9,6 +9,39 @@ import (
 )
 
 /****************************************************************************************
+* SDL_Image code
+* Implements SDL_Widget cos it is one!
+* Implements SDL_TextWidget because it has text and uses the texture cache
+**/
+type SDL_Separator struct {
+	SDL_WidgetBase
+}
+
+var _ SDL_Widget = (*SDL_Separator)(nil) // Ensure SDL_Button 'is a' SDL_Widget
+
+func NewSDLSeparator(x, y, w, h, id int32, bgColour *sdl.Color) *SDL_Separator {
+	but := &SDL_Separator{}
+	but.SDL_WidgetBase = initBase(x, y, w, h, id, 0, bgColour, nil)
+	return but
+}
+
+func (b *SDL_Separator) Click(x, y int32) bool {
+	return false
+}
+
+func (b *SDL_Separator) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
+	if b.bg != nil {
+		renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
+		renderer.FillRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
+	}
+	return nil
+}
+
+func (b *SDL_Separator) Destroy() {
+	// Image cache takes care of all images!
+}
+
+/****************************************************************************************
 * SDL_Arrow code
 * Implements SDL_Widget cos it is one!
 **/
@@ -166,7 +199,6 @@ func (b *SDL_Image) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 			// Background
 			renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
 			renderer.FillRect(br)
-			ir = widgetShrinkRect(ir, 8)
 		}
 		image, _, err := b.textureCache.GetTexture(b.textureName)
 		if err != nil {
