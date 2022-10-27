@@ -149,13 +149,15 @@ func (b *SDL_Arrow) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 type SDL_Image struct {
 	SDL_WidgetBase
 	textureName  string
+	frame        int
 	textureCache *SDL_TextureCache
 	onClick      func(SDL_Widget, int32, int32) bool
 }
 
 var _ SDL_Widget = (*SDL_Image)(nil) // Ensure SDL_Button 'is a' SDL_Widget
-func NewSDLImage(x, y, w, h, id int32, textureName string, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Image {
-	but := &SDL_Image{textureName: textureName, onClick: onClick}
+
+func NewSDLImage(x, y, w, h, id int32, textureName string, frame int, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Image {
+	but := &SDL_Image{textureName: textureName, frame: frame, onClick: onClick}
 	but.SDL_WidgetBase = initBase(x, y, w, h, id, deBounce, bgColour, fgColour)
 	return but
 }
@@ -184,36 +186,38 @@ func (b *SDL_Image) Click(x, y int32) bool {
 
 func (b *SDL_Image) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 	if b.visible {
-		br := &sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h}
-		ir := &sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h}
+		borderRect := &sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h}
+		outRect := &sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h}
 		var bg *sdl.Color = nil
 		var fg *sdl.Color = nil
 		if b.IsEnabled() {
 			fg = b.fg
 			bg = b.bg
 		} else {
-			ir = widgetShrinkRect(ir, 4)
+			outRect = widgetShrinkRect(outRect, 4)
 			fg = widgetColourDim(b.fg, false, 2)
 		}
 		if bg != nil {
 			// Background
 			renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
-			renderer.FillRect(br)
+			renderer.FillRect(borderRect)
 		}
-		image, _, err := b.textureCache.GetTexture(b.textureName)
+		image, ir, err := b.textureCache.GetTexture(b.textureName)
 		if err != nil {
 			renderer.SetDrawColor(255, 0, 0, 255)
 			renderer.DrawRect(&sdl.Rect{X: b.x, Y: b.y, W: 100, H: 100})
 			return nil
 		}
 		if bg != nil || fg != nil {
-			ir = widgetShrinkRect(ir, 8)
+			outRect = widgetShrinkRect(outRect, 8)
 		}
-		renderer.Copy(image, nil, ir)
+		inRect := &sdl.Rect{X: 0, Y: 0, W: ir.W, H: ir.H}
+
+		renderer.Copy(image, inRect, outRect)
 		// Border
 		if fg != nil {
 			renderer.SetDrawColor(fg.R, fg.G, fg.B, fg.A)
-			renderer.DrawRect(br)
+			renderer.DrawRect(borderRect)
 		}
 	}
 	return nil

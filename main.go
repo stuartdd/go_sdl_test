@@ -7,7 +7,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/stuartdd/go_life"
+	go_life "github.com/stuartdd/go_life_engine"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
@@ -17,6 +17,7 @@ const (
 	BUTTON_STOP_START
 	BUTTON_STEP
 	BUTTON_FASTER
+	BUTTON_FASTEST
 	BUTTON_SLOWER
 	ARROW_UP
 	ARROW_DOWN
@@ -40,6 +41,7 @@ var (
 	mouseY              int32 = 0
 	mouseOn                   = false
 	loopDelay           int   = 0
+	lifeGen             *go_life.LifeGen
 	cellSize            int32 = 5
 	cellScale           int32 = 10
 	cellOffsetX         int32 = btnHeight
@@ -49,6 +51,23 @@ var (
 	arrowPosX           int32 = 245
 	arrowPosY           int32 = 180
 )
+
+func updateButtons(buttons, buttonsPaused, arrows *SDL_WidgetList) {
+	l := buttons.ListWidgets()
+	l = append(l, buttonsPaused.ListWidgets()...)
+	for _, b := range l {
+		switch b.GetId() {
+		case BUTTON_FASTEST, BUTTON_FASTER:
+			b.SetEnabled(loopDelay > 0)
+		case BUTTON_STEP:
+			b.SetVisible(lifeGen.GetRunFor() < 2)
+		}
+	}
+	arrows.SetVisible(lifeGen.GetRunFor() < 2)
+	x, y := buttons.ArrangeLR(btnGap, btnMarginTop, btnGap)
+	buttonsPaused.ArrangeLR(x, y, btnGap)
+
+}
 
 func run() int {
 	var window *sdl.Window
@@ -98,13 +117,15 @@ func run() int {
 		return 1
 	}
 
-	lifeGen := go_life.NewLifeGen(func(lg *go_life.LifeGen) {}, go_life.RUN_FOR_EVER)
+	lifeGen = go_life.NewLifeGen(func(lg *go_life.LifeGen) {}, go_life.RUN_FOR_EVER)
 	lifeGen.AddCellsAtOffset(0, 0, go_life.COLOUR_MODE_MASK, rle.Coords())
 
 	buttons := NewSDLWidgetList(font)
+	buttonsPaused := NewSDLWidgetList(font)
 	arrows := NewSDLWidgetList(nil)
 	widgetGroup := NewWidgetGroup()
 	widgetGroup.Add(buttons)
+	widgetGroup.Add(buttonsPaused)
 	widgetGroup.Add(arrows)
 
 	// Load image resources
@@ -120,22 +141,32 @@ func run() int {
 	}
 	defer widgetGroup.Destroy()
 
-	var btnStep *SDL_Button
-	btnSlower := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_SLOWER, "slower", btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
-		loopDelay = loopDelay + 5
+	btnStep := NewSDLButton(330, btnMarginTop, btnWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
+		lifeGen.SetRunFor(1, nil)
+		updateButtons(buttons, buttonsPaused, arrows)
 		return true
 	})
-	btnFaster := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_FASTER, "faster", btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+
+	btnSlower := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_SLOWER, "slower", 0, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		loopDelay = loopDelay + 5
+		updateButtons(buttons, buttonsPaused, arrows)
+		return true
+	})
+
+	btnFaster := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_FASTER, "faster", 0, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
 		loopDelay = loopDelay - 10
 		if loopDelay < 0 {
 			loopDelay = 0
 		}
+		updateButtons(buttons, buttonsPaused, arrows)
 		return true
 	})
-	btnFastest := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_FASTER, "fastest", btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	btnFastest := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_FASTEST, "fastest", 0, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
 		loopDelay = 0
+		updateButtons(buttons, buttonsPaused, arrows)
 		return true
 	})
+
 	btnClose := NewSDLButton(10, btnMarginTop, btnWidth, btnHeight, BUTTON_CLOSE, "Quit", btnBg, btnFg, 0, func(b SDL_Widget, i1, i2 int32) bool {
 		running = false
 		return true
@@ -146,37 +177,27 @@ func run() int {
 		if lifeGen.IsRunning() {
 			lifeGen.SetRunFor(0, nil)
 			bb.SetText("Start")
-			btnStep.SetVisible(true)
-			btnSlower.SetVisible(false)
-			btnFaster.SetVisible(false)
-			arrows.SetVisible(true)
+			buttonsPaused.SetVisible(false)
 			mouseOn = true
 		} else {
 			lifeGen.SetRunFor(go_life.RUN_FOR_EVER, nil)
 			bb.SetText("Stop")
-			btnStep.SetVisible(false)
-			btnSlower.SetVisible(true)
-			btnFaster.SetVisible(true)
-			arrows.SetVisible(false)
+			buttonsPaused.SetVisible(true)
 			mouseOn = false
 		}
-		buttons.ArrangeLR(btnGap)
+		updateButtons(buttons, buttonsPaused, arrows)
 		return true
 	})
 
-	btnStep = NewSDLButton(330, btnMarginTop, btnWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
-		lifeGen.SetRunFor(1, nil)
-		return true
-	})
-	btnStep.SetVisible(false)
 	buttons.Add(btnClose)
 	buttons.Add(btnStop)
 	buttons.Add(NewSDLSeparator(0, 0, 10, btnHeight, 999, widgetColourDim(btnBg, false, 2)))
-	buttons.Add(btnSlower)
-	buttons.Add(btnFaster)
-	buttons.Add(btnFastest)
 	buttons.Add(btnStep)
-	buttons.ArrangeLR(btnGap)
+	buttonsPaused.Add(btnSlower)
+	buttonsPaused.Add(btnFaster)
+	buttonsPaused.Add(btnFastest)
+	buttonsPaused.SetVisible(true)
+
 	arrowR := NewSDLArrow(arrowPosX, arrowPosY, 70, 50, ARROW_RIGHT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
 		cellOffsetX = cellOffsetX + 100
 		return true
@@ -197,21 +218,16 @@ func run() int {
 	arrows.Add(arrowL)
 	arrows.Add(arrowD)
 	arrows.Add(arrowU)
-	arrows.SetVisible(false)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load 'lem': %s\n", err)
 		return 1
 	}
+	updateButtons(buttons, buttonsPaused, arrows)
 	for running {
 		viewPort := renderer.GetViewport()
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 			switch t := event.(type) {
-			// case *sdl.WindowEvent:
-			// 	switch t.Event {
-			// 	case sdl.WINDOWEVENT_RESIZED:
-
-			// 	}
 			case *sdl.QuitEvent:
 				running = false
 			case *sdl.MouseMotionEvent:

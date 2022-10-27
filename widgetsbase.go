@@ -197,60 +197,68 @@ func (b *SDL_WidgetBase) Inside(x, y int32) bool {
 /****************************************************************************************
 * Container for SDL_Widgets. A list of lists
 **/
-type SDL_Widget_Groups struct {
+type SDL_WidgetGroups struct {
 	wigetLists   []*SDL_WidgetList
 	font         *ttf.Font
 	textureCache *SDL_TextureCache
 }
 
-func NewWidgetGroup() *SDL_Widget_Groups {
-	return &SDL_Widget_Groups{wigetLists: make([]*SDL_WidgetList, 0), textureCache: NewTextureCache()}
+func NewWidgetGroup() *SDL_WidgetGroups {
+	return &SDL_WidgetGroups{wigetLists: make([]*SDL_WidgetList, 0), textureCache: NewTextureCache()}
 }
 
-func (wg *SDL_Widget_Groups) Add(widgetList *SDL_WidgetList) {
+func (wg *SDL_WidgetGroups) Add(widgetList *SDL_WidgetList) {
 	wg.GetTextureCache().Merge(widgetList.GetTextureCache())
 	widgetList.SetTextureCache(wg.GetTextureCache())
 	wg.wigetLists = append(wg.wigetLists, widgetList)
 }
 
-func (wg *SDL_Widget_Groups) SetFont(font *ttf.Font) {
+func (wg *SDL_WidgetGroups) ListWidgets() []SDL_Widget {
+	l := make([]SDL_Widget, 0)
+	for _, wList := range wg.wigetLists {
+		l = append(l, wList.ListWidgets()...)
+	}
+	return l
+}
+
+func (wg *SDL_WidgetGroups) SetFont(font *ttf.Font) {
 	wg.font = font
 }
 
-func (wg *SDL_Widget_Groups) GetFont() *ttf.Font {
+func (wg *SDL_WidgetGroups) GetFont() *ttf.Font {
 	return wg.font
 }
 
-func (wg *SDL_Widget_Groups) SetTextureCache(textureCache *SDL_TextureCache) {
+func (wg *SDL_WidgetGroups) SetTextureCache(textureCache *SDL_TextureCache) {
 	wg.textureCache = textureCache
 }
 
-func (wg *SDL_Widget_Groups) GetTextureCache() *SDL_TextureCache {
+func (wg *SDL_WidgetGroups) GetTextureCache() *SDL_TextureCache {
 	return wg.textureCache
 }
 
-func (wg *SDL_Widget_Groups) LoadTextures(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
+func (wg *SDL_WidgetGroups) LoadTextures(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
 	return wg.textureCache.LoadTextures(renderer, applicationDataPath, fileNames)
 }
 
-func (wl *SDL_Widget_Groups) GetTexture(name string) (*sdl.Texture, *sdl.Rect, error) {
+func (wl *SDL_WidgetGroups) GetTexture(name string) (*sdl.Texture, *sdl.Rect, error) {
 	return wl.textureCache.GetTexture(name)
 }
 
-func (wg *SDL_Widget_Groups) Destroy() {
+func (wg *SDL_WidgetGroups) Destroy() {
 	for _, w := range wg.wigetLists {
 		w.Destroy()
 	}
 	wg.textureCache.Destroy()
 }
 
-func (wg *SDL_Widget_Groups) Draw(renderer *sdl.Renderer) {
+func (wg *SDL_WidgetGroups) Draw(renderer *sdl.Renderer) {
 	for _, w := range wg.wigetLists {
 		w.Draw(renderer)
 	}
 }
 
-func (wg *SDL_Widget_Groups) Inside(x, y int32) SDL_Widget {
+func (wg *SDL_WidgetGroups) Inside(x, y int32) SDL_Widget {
 	for _, wl := range wg.wigetLists {
 		w := wl.Inside(x, y)
 		if w != nil {
@@ -304,25 +312,24 @@ func (wl *SDL_WidgetList) Inside(x, y int32) SDL_Widget {
 	return nil
 }
 
-func (wl *SDL_WidgetList) ArrangeLR(padding int32) {
-	var y int32
+func (wl *SDL_WidgetList) ListWidgets() []SDL_Widget {
+	return wl.list
+}
+
+func (wl *SDL_WidgetList) ArrangeLR(xx, yy, padding int32) (int32, int32) {
+	x := xx
+	y := yy
 	var w int32
-	var x int32
-	first := true
 	for _, wid := range wl.list {
 		if wid.IsVisible() {
-			if first {
-				first = false
-				x, y = wid.GetPosition()
-				w, _ = wid.GetSize()
-			} else {
-				x = x + w + padding
-				wid.SetPosition(x, y)
-				w, _ = wid.GetSize()
-			}
+			wid.SetPosition(x, y)
+			w, _ = wid.GetSize()
+			x = x + w + padding
 		}
 	}
+	return x, y
 }
+
 func (wl *SDL_WidgetList) ArrangeTB(padding int32) {
 	var x int32
 	var y int32
@@ -474,6 +481,22 @@ func loadTextureFile(renderer *sdl.Renderer, fileName string) (*sdl.Texture, *sd
 	return texture, &sdl.Rect{X: 0, Y: 0, W: t3, H: t4}, nil
 }
 
+func getTextureCacheEntryForText(renderer *sdl.Renderer, text, name string, font *ttf.Font, colour *sdl.Color) (*SDL_TextureCacheEntry, error) {
+	fmt.Printf("getTextureCacheEntryForText %s\n", name)
+	surface, err := font.RenderUTF8Blended(text, *colour)
+	if err != nil {
+		return nil, err
+	}
+	defer surface.Free()
+	clip := surface.ClipRect
+	// Dont destroy the texture. Call Destroy on the SDL_Widgets object to destroy ALL cached textures
+	txt, err := renderer.CreateTextureFromSurface(surface)
+	if err != nil {
+		return nil, err
+	}
+	return &SDL_TextureCacheEntry{texture: txt, clipRect: clip, name: name}, nil
+}
+
 // Get a SDL_TextureCacheEntry from the cache specifically for a SDL_TextWidget. Add one if it does not exist
 //
 //		Uses derived name (key)
@@ -485,6 +508,7 @@ func getCachedTextWidgetEntry(renderer *sdl.Renderer, tw SDL_TextWidget, font *t
 	// cache key must include Dim (disabled) variations of the textures
 	var cacheKey = fmt.Sprintf("text.%s.%t", tw.GetText(), tw.IsEnabled())
 	var cacheDataEntry *SDL_TextureCacheEntry
+	var err error
 	tc := tw.GetTextureCache()
 
 	// Do we have a texture cache and is the texture already cached
@@ -493,19 +517,10 @@ func getCachedTextWidgetEntry(renderer *sdl.Renderer, tw SDL_TextWidget, font *t
 	}
 	// If not cached than creat a cache entry
 	if cacheDataEntry == nil {
-		text, err := font.RenderUTF8Blended(tw.GetText(), *widgetColourDim(tw.GetForeground(), tw.IsEnabled(), 3))
+		cacheDataEntry, err = getTextureCacheEntryForText(renderer, tw.GetText(), cacheKey, font, widgetColourDim(tw.GetForeground(), tw.IsEnabled(), 3))
 		if err != nil {
 			return nil, err
 		}
-		defer text.Free()
-		clip := text.ClipRect
-		// Dont destroy the texture. Call Destroy on the SDL_Widgets object to destroy ALL cached textures
-		txt, err := renderer.CreateTextureFromSurface(text)
-		if err != nil {
-			return nil, err
-		}
-		// Crteate a new cache data
-		cacheDataEntry = &SDL_TextureCacheEntry{texture: txt, clipRect: clip, name: cacheKey}
 		// If there is a texture cache then add the cache entry ti it
 		if tc != nil {
 			tc.textureMap[cacheKey] = cacheDataEntry
