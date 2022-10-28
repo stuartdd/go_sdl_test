@@ -1,12 +1,123 @@
 package main
 
 import (
+	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/veandco/go-sdl2/gfx"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
+
+type SDL_Label struct {
+	SDL_WidgetBase
+	text         string
+	cacheKey     string
+	cacheInvalid bool
+	textureCache *SDL_TextureCache
+	align        ALIGN_TEXT
+}
+
+var _ SDL_TextWidget = (*SDL_Label)(nil)         // Ensure SDL_Button 'is a' SDL_Widget
+var _ SDL_Widget = (*SDL_Label)(nil)             // Ensure SDL_Button 'is a' SDL_Widget
+var _ SDL_TextureCacheWidget = (*SDL_Label)(nil) // Ensure SDL_Button 'is a' SDL_Widget
+
+func NewSDLLabel(x, y, w, h, id int32, text string, align ALIGN_TEXT, bgColour, fgColour *sdl.Color) *SDL_Label {
+	but := &SDL_Label{text: text, cacheInvalid: true, align: align, cacheKey: fmt.Sprintf("label:%d:%d", id, rand.Intn(100))}
+	but.SDL_WidgetBase = initBase(x, y, w, h, id, 0, bgColour, fgColour)
+	return but
+}
+
+func (b *SDL_Label) SetTextureCache(tc *SDL_TextureCache) {
+	b.textureCache = tc
+}
+
+func (b *SDL_Label) GetTextureCache() *SDL_TextureCache {
+	return b.textureCache
+}
+
+func (b *SDL_Label) SetForeground(c *sdl.Color) {
+	if b.fg != c {
+		b.cacheInvalid = true
+		b.fg = c
+	}
+}
+
+func (b *SDL_Label) SetText(text string) {
+	if b.text != text {
+		b.cacheInvalid = true
+		b.text = text
+	}
+}
+
+func (b *SDL_Label) SetEnabled(e bool) {
+	if b.IsEnabled() != e {
+		b.cacheInvalid = true
+		b.SDL_WidgetBase.SetEnabled(e)
+	}
+}
+
+func (b *SDL_Label) GetText() string {
+	return b.text
+}
+
+func (b *SDL_Label) Click(x, y int32) bool {
+	return false
+}
+
+func (b *SDL_Label) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
+	if b.IsVisible() {
+		ctwe, ok := b.textureCache.textureMap[b.cacheKey]
+		if !ok || b.cacheInvalid {
+			var err error
+			ctwe, err = getTextureCacheEntryForText(renderer, b.text, b.cacheKey, font, widgetColourDim(b.fg, b.IsEnabled(), 2))
+			if err != nil {
+				renderer.SetDrawColor(255, 0, 0, 255)
+				renderer.DrawRect(&sdl.Rect{X: b.x, Y: b.y, W: 100, H: 100})
+				return nil
+			}
+			b.textureCache.textureMap[b.cacheKey] = ctwe
+			if b.align == ALIGN_FIT {
+				b.SetSize(ctwe.clipRect.W, b.h)
+			}
+		}
+		clip := ctwe.clipRect
+		// Center the text inside the buttonj
+		var tx int32
+		switch b.align {
+		case ALIGN_CENTER:
+			tx = b.x + (b.w-clip.W)/2
+		case ALIGN_LEFT:
+			tx = b.x + 10
+		case ALIGN_RIGHT:
+			tx = b.x + (b.w - clip.W)
+		case ALIGN_FIT:
+			tx = b.x + 10
+			if b.align == ALIGN_FIT {
+				b.SetSize(ctwe.clipRect.W+20, b.h)
+			}
+		}
+		if b.align == ALIGN_CENTER {
+			tx = b.x + (b.w-clip.W)/2
+		}
+		ty := b.y + (b.h-clip.H)/2
+		fullRect := &sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h}
+		if b.bg != nil {
+			renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
+			renderer.FillRect(fullRect)
+		}
+		renderer.Copy(ctwe.texture, nil, &sdl.Rect{X: tx, Y: ty, W: clip.W, H: clip.H})
+		if b.fg != nil {
+			renderer.SetDrawColor(b.fg.R, b.fg.G, b.fg.B, b.fg.A)
+			renderer.DrawRect(fullRect)
+		}
+	}
+	return nil
+}
+func (b *SDL_Label) Destroy() {
+	// Image cache takes care of all images!
+}
 
 /****************************************************************************************
 * SDL_Image code
@@ -287,16 +398,16 @@ func (b *SDL_Button) SetText(text string) {
 	b.text = text
 }
 
+func (b *SDL_Button) GetText() string {
+	return b.text
+}
+
 func (b *SDL_Button) SetTextureCache(tc *SDL_TextureCache) {
 	b.textureCache = tc
 }
 
 func (b *SDL_Button) GetTextureCache() *SDL_TextureCache {
 	return b.textureCache
-}
-
-func (b *SDL_Button) GetText() string {
-	return b.text
 }
 
 func (b *SDL_Button) Click(x, y int32) bool {
@@ -319,10 +430,6 @@ func (b *SDL_Button) Destroy() {
 
 func (b *SDL_Button) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 	if b.visible {
-		// Save the current Draw colour and restore on exit
-		rr, gg, bb, aa, _ := renderer.GetDrawColor()
-		defer renderer.SetDrawColor(rr, gg, bb, aa)
-
 		// Dray the button
 		renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
 		renderer.FillRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})

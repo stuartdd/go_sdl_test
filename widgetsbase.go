@@ -10,10 +10,18 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+type ALIGN_TEXT int
+
+const (
+	ALIGN_CENTER ALIGN_TEXT = iota
+	ALIGN_LEFT
+	ALIGN_RIGHT
+	ALIGN_FIT
+)
+
 type SDL_Widget interface {
 	Draw(*sdl.Renderer, *ttf.Font) error
 	Click(int32, int32) bool
-
 	Inside(int32, int32) bool    // Base
 	GetRect() *sdl.Rect          // Base
 	SetId(int32)                 // Base
@@ -28,6 +36,8 @@ type SDL_Widget interface {
 	SetSize(int32, int32)        // Base
 	GetSize() (int32, int32)     // Base
 	Destroy()                    // Base
+	GetForeground() *sdl.Color   // Base
+	GetBackground() *sdl.Color   // Base
 }
 
 type SDL_TextWidget interface {
@@ -41,12 +51,15 @@ type SDL_TextWidget interface {
 }
 
 type SDL_ImageWidget interface {
-	SetTextureCache(*SDL_TextureCache)
-	GetTextureCache() *SDL_TextureCache
 	SetFrame(tf int32)
 	GetFrame() int32
 	NextFrame() int32
 	GetFrameCount() int32
+}
+
+type SDL_TextureCacheWidget interface {
+	SetTextureCache(*SDL_TextureCache)
+	GetTextureCache() *SDL_TextureCache
 }
 
 type SDL_Shape struct {
@@ -304,7 +317,7 @@ func (wl *SDL_WidgetList) GetTexture(name string) (*sdl.Texture, *sdl.Rect, erro
 }
 
 func (wl *SDL_WidgetList) Add(widget SDL_Widget) {
-	tw, ok := widget.(SDL_ImageWidget)
+	tw, ok := widget.(SDL_TextureCacheWidget)
 	if ok {
 		tw.SetTextureCache(wl.textureCache)
 	}
