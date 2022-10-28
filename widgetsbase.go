@@ -43,6 +43,10 @@ type SDL_TextWidget interface {
 type SDL_ImageWidget interface {
 	SetTextureCache(*SDL_TextureCache)
 	GetTextureCache() *SDL_TextureCache
+	SetFrame(tf int32)
+	GetFrame() int32
+	NextFrame() int32
+	GetFrameCount() int32
 }
 
 type SDL_Shape struct {
@@ -237,8 +241,12 @@ func (wg *SDL_WidgetGroups) GetTextureCache() *SDL_TextureCache {
 	return wg.textureCache
 }
 
-func (wg *SDL_WidgetGroups) LoadTextures(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
-	return wg.textureCache.LoadTextures(renderer, applicationDataPath, fileNames)
+func (wg *SDL_WidgetGroups) LoadTexturesFromFiles(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
+	return wg.textureCache.LoadTexturesFromFiles(renderer, applicationDataPath, fileNames)
+}
+
+func (wg *SDL_WidgetGroups) LoadTexturesFromText(renderer *sdl.Renderer, textMap map[string]string, font *ttf.Font, colour *sdl.Color) error {
+	return wg.textureCache.LoadTexturesFromText(renderer, textMap, font, colour)
 }
 
 func (wl *SDL_WidgetGroups) GetTexture(name string) (*sdl.Texture, *sdl.Rect, error) {
@@ -281,11 +289,11 @@ func NewSDLWidgetList(font *ttf.Font) *SDL_WidgetList {
 	return &SDL_WidgetList{textureCache: nil, list: make([]SDL_Widget, 0), font: font}
 }
 
-func (wl *SDL_WidgetList) LoadTextures(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
+func (wl *SDL_WidgetList) LoadTexturesFromFiles(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
 	if wl.textureCache == nil {
 		wl.textureCache = NewTextureCache()
 	}
-	return wl.textureCache.LoadTextures(renderer, applicationDataPath, fileNames)
+	return wl.textureCache.LoadTexturesFromFiles(renderer, applicationDataPath, fileNames)
 }
 
 func (wl *SDL_WidgetList) GetTexture(name string) (*sdl.Texture, *sdl.Rect, error) {
@@ -416,7 +424,6 @@ type SDL_TextureCache struct {
 }
 
 func NewTextureCache() *SDL_TextureCache {
-	fmt.Println("NewTextureCache")
 	return &SDL_TextureCache{textureMap: make(map[string]*SDL_TextureCacheEntry)}
 }
 
@@ -424,7 +431,6 @@ func (tc *SDL_TextureCache) Merge(fromCache *SDL_TextureCache) {
 	if fromCache == nil {
 		return
 	}
-	fmt.Println("MergeTextureCache")
 	for n, v := range fromCache.textureMap {
 		tc.textureMap[n] = v
 	}
@@ -436,7 +442,20 @@ func (tc *SDL_TextureCache) Destroy() {
 	}
 }
 
-func (tc *SDL_TextureCache) LoadTextures(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
+// func (tc *SDL_TextureCache) LoadTextures(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
+// }
+func (tc *SDL_TextureCache) LoadTexturesFromText(renderer *sdl.Renderer, textMap map[string]string, font *ttf.Font, colour *sdl.Color) error {
+	for name, text := range textMap {
+		tce, err := getTextureCacheEntryForText(renderer, text, name, font, colour)
+		if err != nil {
+			return err
+		}
+		tc.textureMap[name] = tce
+	}
+	return nil
+}
+
+func (tc *SDL_TextureCache) LoadTexturesFromFiles(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
 	for name, fileName := range fileNames {
 		var fn string
 		if applicationDataPath == "" {
@@ -482,7 +501,6 @@ func loadTextureFile(renderer *sdl.Renderer, fileName string) (*sdl.Texture, *sd
 }
 
 func getTextureCacheEntryForText(renderer *sdl.Renderer, text, name string, font *ttf.Font, colour *sdl.Color) (*SDL_TextureCacheEntry, error) {
-	fmt.Printf("getTextureCacheEntryForText %s\n", name)
 	surface, err := font.RenderUTF8Blended(text, *colour)
 	if err != nil {
 		return nil, err

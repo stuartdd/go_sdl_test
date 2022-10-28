@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"time"
 
 	go_life "github.com/stuartdd/go_life_engine"
 	"github.com/veandco/go-sdl2/sdl"
@@ -19,6 +20,7 @@ const (
 	BUTTON_FASTER
 	BUTTON_FASTEST
 	BUTTON_SLOWER
+	BUTTON_NUM
 	ARROW_UP
 	ARROW_DOWN
 	ARROW_LEFT
@@ -30,6 +32,7 @@ var (
 	winTitle            string = "Go-SDL2 Render"
 	winWidth, winHeight int32  = 900, 900
 	displayMode         sdl.DisplayMode
+	fontSize            int   = 50
 	btnBg                     = &sdl.Color{R: 0, G: 56, B: 0, A: 128}
 	btnFg                     = &sdl.Color{R: 0, G: 255, B: 0, A: 255}
 	btnHeight           int32 = 70
@@ -102,7 +105,7 @@ func run() int {
 		return 1
 	}
 	defer ttf.Quit()
-	font, err := ttf.OpenFont(path.Join(resources, "buttonFont.ttf"), 50)
+	font, err := ttf.OpenFont(path.Join(resources, "buttonFont.ttf"), fontSize)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load the font: %s\n", err)
 		return 1
@@ -129,14 +132,24 @@ func run() int {
 	widgetGroup.Add(arrows)
 
 	// Load image resources
-	err = widgetGroup.LoadTextures(renderer, resources, map[string]string{
+	err = widgetGroup.LoadTexturesFromFiles(renderer, resources, map[string]string{
 		"lem":     "lem.png",
 		"slower":  "slower.png",
 		"faster":  "faster.png",
 		"fastest": "fastest.png",
 	})
+
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load textures: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to load file textures: %s\n", err)
+		return 1
+	}
+
+	err = widgetGroup.LoadTexturesFromText(renderer, map[string]string{
+		"numbers": "0123456789",
+	}, font, btnFg)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load text textures: %s\n", err)
 		return 1
 	}
 	defer widgetGroup.Destroy()
@@ -147,13 +160,13 @@ func run() int {
 		return true
 	})
 
-	btnSlower := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_SLOWER, "slower", 0, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	btnSlower := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_SLOWER, "slower", 0, 1, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
 		loopDelay = loopDelay + 5
 		updateButtons(buttons, buttonsPaused, arrows)
 		return true
 	})
 
-	btnFaster := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_FASTER, "faster", 0, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	btnNumber9 := NewSDLImage(400, 400, 50, btnHeight, BUTTON_NUM, "numbers", 9, 10, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
 		loopDelay = loopDelay - 10
 		if loopDelay < 0 {
 			loopDelay = 0
@@ -161,7 +174,16 @@ func run() int {
 		updateButtons(buttons, buttonsPaused, arrows)
 		return true
 	})
-	btnFastest := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_FASTEST, "fastest", 0, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+
+	btnFaster := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_FASTER, "faster", 0, 1, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		loopDelay = loopDelay - 10
+		if loopDelay < 0 {
+			loopDelay = 0
+		}
+		updateButtons(buttons, buttonsPaused, arrows)
+		return true
+	})
+	btnFastest := NewSDLImage(400, 400, btnHeight, btnHeight, BUTTON_FASTEST, "fastest", 0, 1, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
 		loopDelay = 0
 		updateButtons(buttons, buttonsPaused, arrows)
 		return true
@@ -191,6 +213,7 @@ func run() int {
 
 	buttons.Add(btnClose)
 	buttons.Add(btnStop)
+	buttons.Add(btnNumber9)
 	buttons.Add(NewSDLSeparator(0, 0, 10, btnHeight, 999, widgetColourDim(btnBg, false, 2)))
 	buttons.Add(btnStep)
 	buttonsPaused.Add(btnSlower)
@@ -223,6 +246,13 @@ func run() int {
 		fmt.Fprintf(os.Stderr, "Failed to load 'lem': %s\n", err)
 		return 1
 	}
+	go func() {
+		for running {
+			time.Sleep(time.Second)
+			btnNumber9.NextFrame()
+		}
+
+	}()
 	updateButtons(buttons, buttonsPaused, arrows)
 	for running {
 		viewPort := renderer.GetViewport()

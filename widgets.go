@@ -149,17 +149,42 @@ func (b *SDL_Arrow) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 type SDL_Image struct {
 	SDL_WidgetBase
 	textureName  string
-	frame        int
+	frame        int32
+	frameCount   int32
 	textureCache *SDL_TextureCache
 	onClick      func(SDL_Widget, int32, int32) bool
 }
 
-var _ SDL_Widget = (*SDL_Image)(nil) // Ensure SDL_Button 'is a' SDL_Widget
+var _ SDL_Widget = (*SDL_Image)(nil)      // Ensure SDL_Image 'is a' SDL_Widget
+var _ SDL_ImageWidget = (*SDL_Image)(nil) // Ensure SDL_Image 'is a' SDL_ImageWidget
 
-func NewSDLImage(x, y, w, h, id int32, textureName string, frame int, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Image {
-	but := &SDL_Image{textureName: textureName, frame: frame, onClick: onClick}
+func NewSDLImage(x, y, w, h, id int32, textureName string, frame, frameCount int32, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Image {
+	but := &SDL_Image{textureName: textureName, frame: frame, frameCount: frameCount, onClick: onClick}
 	but.SDL_WidgetBase = initBase(x, y, w, h, id, deBounce, bgColour, fgColour)
 	return but
+}
+
+func (b *SDL_Image) SetFrame(tf int32) {
+	if tf >= b.frameCount {
+		tf = 0
+	}
+	b.frame = tf
+}
+
+func (b *SDL_Image) GetFrame() int32 {
+	return b.frame
+}
+
+func (b *SDL_Image) NextFrame() int32 {
+	b.frame++
+	if b.frame >= b.frameCount {
+		b.frame = 0
+	}
+	return b.frame
+}
+
+func (b *SDL_Image) GetFrameCount() int32 {
+	return b.frameCount
 }
 
 func (b *SDL_Image) SetTextureCache(tc *SDL_TextureCache) {
@@ -211,9 +236,15 @@ func (b *SDL_Image) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		if bg != nil || fg != nil {
 			outRect = widgetShrinkRect(outRect, 8)
 		}
-		inRect := &sdl.Rect{X: 0, Y: 0, W: ir.W, H: ir.H}
-
-		renderer.Copy(image, inRect, outRect)
+		if b.frameCount > 1 {
+			w := (ir.W / b.frameCount)
+			x := (w * b.frame)
+			inRect := &sdl.Rect{X: x, Y: 0, W: w, H: outRect.H}
+			outRect := &sdl.Rect{X: outRect.X, Y: outRect.Y, W: w, H: outRect.H}
+			renderer.Copy(image, inRect, outRect)
+		} else {
+			renderer.Copy(image, nil, outRect)
+		}
 		// Border
 		if fg != nil {
 			renderer.SetDrawColor(fg.R, fg.G, fg.B, fg.A)
