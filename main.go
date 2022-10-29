@@ -1,4 +1,4 @@
-// author: Jacky Boen
+// author: Stuart Davies
 
 package main
 
