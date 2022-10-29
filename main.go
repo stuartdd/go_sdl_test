@@ -34,9 +34,12 @@ const (
 )
 
 var (
-	resources           string = "resources"
-	winTitle            string = "Go-SDL2 Render"
-	winWidth, winHeight int32  = 900, 900
+	resources           string  = "resources"
+	winTitle            string  = "Go-SDL2 Render"
+	winWidth, winHeight int32   = 900, 900
+	scaleXf, scaleYf    float32 = 0.5, 0.5
+	scaleX1f, scaleY1f  float32 = 1 / scaleXf, 1 / scaleYf
+	scaleX1i, scaleY1i  int32   = int32(scaleX1f), int32(scaleY1f)
 	displayMode         sdl.DisplayMode
 	fontSize            int    = 50
 	btnBg                      = &sdl.Color{R: 0, G: 56, B: 0, A: 128}
@@ -60,27 +63,6 @@ var (
 	arrowPosX           int32 = 245
 	arrowPosY           int32 = 180
 )
-
-func updateButtons(buttons, buttonsPaused, arrows *SDL_WidgetList) {
-	l := buttons.ListWidgets()
-	l = append(l, buttonsPaused.ListWidgets()...)
-	for _, b := range l {
-		switch b.GetId() {
-		case BUTTON_FASTEST, BUTTON_FASTER:
-			b.SetEnabled(loopDelay > MIN_LOOP_DELAY)
-		case BUTTON_SLOWER:
-			b.SetEnabled(loopDelay < MAX_LOOP_DELAY)
-		case BUTTON_STEP:
-			b.SetVisible(lifeGen.GetRunFor() < 2)
-		case LABEL_SPEED:
-			b.(*SDL_Label).SetText(fmt.Sprintf("Delay:%dms", loopDelay))
-		}
-	}
-	arrows.SetVisible(lifeGen.GetRunFor() < 2)
-	x, y := buttons.ArrangeLR(btnGap, btnMarginTop, btnGap)
-	buttonsPaused.ArrangeLR(x, y, btnGap)
-
-}
 
 func run() int {
 	var window *sdl.Window
@@ -108,7 +90,7 @@ func run() int {
 		return 2
 	}
 	defer renderer.Destroy()
-
+	renderer.SetScale(scaleXf, scaleYf)
 	// Load the font and ensure it is Closed() properly
 	if err = ttf.Init(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to init the ttf font system: %s\n", err)
@@ -196,6 +178,7 @@ func run() int {
 
 	labelGen := NewSDLLabel(10, btnMarginTop, 290, btnHeight, LABEL_GEN, "Gen:0", ALIGN_LEFT, btnBg, btnFg)
 	labelSpeed := NewSDLLabel(10, btnMarginTop, 350, btnHeight, LABEL_SPEED, "Delay:0ms", ALIGN_LEFT, btnBg, btnFg)
+	labelDiag := NewSDLLabel(10, btnMarginTop, 500, btnHeight, LABEL_GEN, "DIAG", ALIGN_LEFT, btnBg, btnFg)
 
 	btnStop := NewSDLButton(170, btnMarginTop, btnWidth+30, btnHeight, BUTTON_STOP_START, "Stop", btnBg, btnFg, 500, func(b SDL_Widget, i1, i2 int32) bool {
 		bb := b.(*SDL_Button)
@@ -222,6 +205,8 @@ func run() int {
 	buttonsPaused.Add(btnFaster)
 	buttonsPaused.Add(btnFastest)
 	buttonsPaused.Add(labelSpeed)
+	buttonsPaused.Add(labelDiag)
+
 	buttonsPaused.SetVisible(true)
 
 	arrowR := NewSDLArrow(arrowPosX, arrowPosY, 70, 50, ARROW_RIGHT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
@@ -268,24 +253,29 @@ func run() int {
 	for running {
 		viewPort := renderer.GetViewport()
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+
 			switch t := event.(type) {
 			case *sdl.QuitEvent:
 				running = false
 			case *sdl.MouseMotionEvent:
 				mouseX = t.X
 				mouseY = t.Y
+				labelDiag.SetText(fmt.Sprintf("X:%f Y:%f,", scaleX1f, scaleY1f))
 			case *sdl.MouseButtonEvent:
 				if t.State == sdl.PRESSED {
-					w := widgetGroup.Inside(t.X, t.Y)
+					x := t.X * scaleX1i
+					y := t.Y * scaleY1i
+					w := widgetGroup.Inside(x, y)
 					if w != nil {
-						go w.Click(t.X, t.Y)
+						go w.Click(x, y)
 					} else {
-						cellOffsetX = t.X
-						cellOffsetY = t.Y
+						cellOffsetX = x
+						cellOffsetY = y
 					}
 				}
 			case *sdl.MouseWheelEvent:
-				cellSize = cellSize + t.Y
+				x := t.X
+				cellSize = cellSize + x
 				if cellSize < 1 {
 					cellSize = 1
 				}
@@ -298,22 +288,26 @@ func run() int {
 		renderer.FillRect(&sdl.Rect{X: 0, Y: 0, W: viewPort.W, H: btnTopMarginHeight})
 		renderer.SetDrawColor(0, 255, 255, 255)
 		cell := lifeGen.GetRootCell()
+		callSiScale := cellSize * scaleX1i
 		for cell != nil {
 			cellX, cellY = cell.XY()
-			y := cellOffsetY + (cellY * cellScale)
+			x := (cellOffsetX + cellX) * scaleX1i * cellScale
+			y := (cellOffsetY + cellY) * scaleY1i * cellScale
 			if y > btnTopMarginHeight {
-				if cellSize > 5 {
-					renderer.FillRect(&sdl.Rect{X: cellOffsetX + (cellX * cellScale), Y: cellOffsetY + (cellY * cellScale), W: cellSize, H: cellSize})
+				if callSiScale > 5 {
+					renderer.FillRect(&sdl.Rect{X: x, Y: y, W: callSiScale, H: callSiScale})
 				} else {
-					renderer.DrawRect(&sdl.Rect{X: cellOffsetX + (cellX * cellScale), Y: cellOffsetY + (cellY * cellScale), W: cellSize, H: cellSize})
+					renderer.DrawRect(&sdl.Rect{X: x, Y: y, W: callSiScale, H: callSiScale})
 				}
 			}
 			cell = cell.Next()
 		}
 		widgetGroup.Draw(renderer)
-		if mouseOn {
-			renderer.FillRect(&sdl.Rect{X: mouseX - (cellSize / 2), Y: mouseY - (cellSize / 2), W: cellSize, H: cellSize})
-		}
+		// if mouseOn {
+		renderer.SetDrawColor(0, 0, 255, 255)
+		renderer.FillRect(&sdl.Rect{X: mouseX * scaleX1i, Y: mouseY * scaleY1i, W: callSiScale, H: callSiScale})
+		// renderer.FillRect(&sdl.Rect{X: mouseX - (cellSize / 2), Y: mouseY - (cellSize / 2), W: cellSize, H: cellSize})
+		// }
 
 		renderer.Present()
 		sdl.Delay(20)
@@ -323,4 +317,25 @@ func run() int {
 
 func main() {
 	os.Exit(run())
+}
+
+func updateButtons(buttons, buttonsPaused, arrows *SDL_WidgetList) {
+	l := buttons.ListWidgets()
+	l = append(l, buttonsPaused.ListWidgets()...)
+	for _, b := range l {
+		switch b.GetId() {
+		case BUTTON_FASTEST, BUTTON_FASTER:
+			b.SetEnabled(loopDelay > MIN_LOOP_DELAY)
+		case BUTTON_SLOWER:
+			b.SetEnabled(loopDelay < MAX_LOOP_DELAY)
+		case BUTTON_STEP:
+			b.SetVisible(lifeGen.GetRunFor() < 2)
+		case LABEL_SPEED:
+			b.(*SDL_Label).SetText(fmt.Sprintf("Delay:%dms", loopDelay))
+		}
+	}
+	arrows.SetVisible(lifeGen.GetRunFor() < 2)
+	x, y := buttons.ArrangeLR(btnGap, btnMarginTop, btnGap)
+	buttonsPaused.ArrangeLR(x, y, btnGap)
+
 }
