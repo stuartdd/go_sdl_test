@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"time"
 
@@ -10,6 +11,170 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 )
 
+/****************************************************************************************
+* SDL_Shape code.
+* Implements SDL_Widget cos it is one!
+**/
+type SDL_Shape struct {
+	SDL_WidgetBase
+	validRect *sdl.Rect // If the state of the shape has changed this should be nil.
+	vxIn      []int16
+	vyIn      []int16
+	vxOut     []int16
+	vyOut     []int16
+	onClick   func(SDL_Widget, int32, int32) bool
+}
+
+var _ SDL_Widget = (*SDL_Shape)(nil) // Ensure SDL_Button 'is a' SDL_Widget
+
+func NewSDLShape(x, y, w, h, id int32, bgColour, fgColour *sdl.Color, onClick func(SDL_Widget, int32, int32) bool) *SDL_Shape {
+	shape := &SDL_Shape{vxIn: make([]int16, 0), vyIn: make([]int16, 0), validRect: nil, onClick: onClick}
+	shape.SDL_WidgetBase = initBase(x, y, w, h, id, 0, bgColour, fgColour)
+	return shape
+}
+
+func NewSDLShapeArrowRight(x, y, w, h, id int32, bgColour, fgColour *sdl.Color, onClick func(SDL_Widget, int32, int32) bool) *SDL_Shape {
+	sh := NewSDLShape(x, y, w, h, id, bgColour, fgColour, onClick)
+	var halfH int32 = h / 2
+	var qtr1H int32 = h / 4
+	var thrd1W int32 = w / 6
+	var thrd2W int32 = thrd1W * 4
+	sh.Add(thrd1W, -qtr1H)
+	sh.Add(thrd2W, -qtr1H)
+	sh.Add(thrd2W, -halfH)
+	sh.Add(w, 0)
+	sh.Add(thrd2W, +halfH)
+	sh.Add(thrd2W, +qtr1H)
+	sh.Add(thrd1W, +qtr1H)
+	return sh
+}
+
+func (s *SDL_Shape) SetPosition(x, y int32) bool {
+	b := s.SDL_WidgetBase.SetPosition(x, y)
+	if b {
+		s.validRect = nil
+	}
+	return b
+}
+
+func (s *SDL_Shape) SetSize(w, h int32) bool {
+	b := s.SDL_WidgetBase.SetSize(w, h)
+	if b {
+		s.validRect = nil
+	}
+	return b
+}
+
+func (s *SDL_Shape) Scale(sc float32) {
+	s.SDL_WidgetBase.Scale(sc)
+	for i := 0; i < len(s.vxIn); i++ {
+		s.vxIn[i] = int16(float32(s.vxIn[i]) * sc)
+		s.vyIn[i] = int16(float32(s.vyIn[i]) * sc)
+	}
+	s.validRect = nil
+}
+
+func (s *SDL_Shape) Add(x, y int32) {
+	s.vxIn = append(s.vxIn, int16(x))
+	s.vyIn = append(s.vyIn, int16(y))
+	s.validRect = nil
+}
+
+func (b *SDL_Shape) Click(x, y int32) bool {
+	if b.enabled && b.visible && b.notPressed && b.onClick != nil {
+		if b.deBounce > 0 {
+			b.notPressed = false
+			defer func() {
+				time.Sleep(time.Millisecond * time.Duration(b.deBounce))
+				b.notPressed = true
+			}()
+		}
+		return b.onClick(b, x, y)
+	}
+	return false
+}
+
+func (b *SDL_Shape) Destroy() {
+}
+
+func (s *SDL_Shape) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
+	if s.IsVisible() {
+		s.GetRect() // Make sure we update the Out Arrays is the state of the shape was changed
+		if s.bg != nil {
+			gfx.FilledPolygonColor(renderer, s.vxOut, s.vyOut, *widgetColourDim(s.bg, s.IsEnabled(), 1.5))
+		}
+		if s.fg != nil {
+			gfx.PolygonColor(renderer, s.vxOut, s.vyOut, *widgetColourDim(s.fg, s.IsEnabled(), 2.5))
+		}
+	}
+	return nil
+}
+
+func (s *SDL_Shape) Rotate(angle int) {
+	rad := float64(angle) * DEG_TO_RAD
+	var px float64 = 0
+	var py float64 = 0
+	sinA := math.Sin(rad)
+	cosA := math.Cos(rad)
+	for i := 0; i < len(s.vxIn); i++ {
+		px = float64(s.vxIn[i])
+		py = float64(s.vyIn[i])
+		s.vxIn[i] = int16(cosA*px - sinA*py)
+		s.vyIn[i] = int16(sinA*px + cosA*py)
+	}
+	s.validRect = nil
+}
+
+func (s *SDL_Shape) Inside(x, y int32) bool {
+	if s.visible {
+		return isInsideRect(x, y, s.GetRect())
+	}
+	return false
+}
+
+func (s *SDL_Shape) GetRect() *sdl.Rect {
+	if s.validRect == nil {
+		fmt.Println("Rect Invalid")
+		count := len(s.vxIn)
+		vxOut := make([]int16, count)
+		vyOut := make([]int16, count)
+		x := int16(s.x)
+		y := int16(s.y)
+		for i := 0; i < count; i++ {
+			vxOut[i] = x + s.vxIn[i]
+			vyOut[i] = y + s.vyIn[i]
+		}
+
+		var minx int16 = math.MaxInt16
+		var miny int16 = math.MaxInt16
+		var maxx int16 = math.MinInt16
+		var maxy int16 = math.MinInt16
+		for i := 0; i < count; i++ {
+			if vxOut[i] < minx {
+				minx = vxOut[i]
+			}
+			if vxOut[i] > maxx {
+				maxx = vxOut[i]
+			}
+			if vyOut[i] < miny {
+				miny = vyOut[i]
+			}
+			if vyOut[i] > maxy {
+				maxy = vyOut[i]
+			}
+		}
+		s.vxOut = vxOut
+		s.vyOut = vyOut
+		s.validRect = &sdl.Rect{X: int32(minx), Y: int32(miny), W: int32(maxx - minx), H: int32(maxy - miny)}
+	}
+	return s.validRect
+}
+
+/****************************************************************************************
+* SDL_Label code
+* Implements SDL_Widget cos it is one!
+* Implements SDL_TextWidget because it has text and uses the texture cache
+**/
 type SDL_Label struct {
 	SDL_WidgetBase
 	text         string
@@ -103,7 +268,8 @@ func (b *SDL_Label) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		}
 		renderer.Copy(ctwe.texture, nil, &sdl.Rect{X: b.x + int32(tx), Y: b.y + int32(ty), W: int32(tw), H: int32(th)})
 		if b.fg != nil {
-			renderer.SetDrawColor(b.fg.R, b.fg.G, b.fg.B, b.fg.A)
+			borderColour := widgetColourDim(b.fg, b.IsEnabled(), 2)
+			renderer.SetDrawColor(borderColour.R, borderColour.G, borderColour.B, borderColour.A)
 			renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 1, H: b.h - 1})
 		}
 	}
@@ -174,7 +340,7 @@ func (b *SDL_Button) Destroy() {
 
 func (b *SDL_Button) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 	if b.visible {
-		var cacheKey = fmt.Sprintf("%s.%s.%t", TEXTURE_CACHE_TEXT_PREF, b.text, b.enabled && b.notPressed)
+		var cacheKey = fmt.Sprintf("%s.%s.%t", TEXTURE_CACHE_TEXT_PREF, b.text, b.IsEnabled() && b.notPressed)
 		ctwe, ok := b.textureCache.textureMap[cacheKey]
 		if !ok {
 			var err error
@@ -199,7 +365,7 @@ func (b *SDL_Button) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		ty := (float32(b.h) - th) / 2
 		renderer.Copy(ctwe.texture, nil, &sdl.Rect{X: b.x + int32(tx), Y: b.y + int32(ty), W: int32(tw), H: int32(th)})
 		if b.fg != nil {
-			borderColour := widgetColourBright(b.fg, !b.enabled)
+			borderColour := widgetColourDim(b.fg, b.IsEnabled(), 2)
 			renderer.SetDrawColor(borderColour.R, borderColour.G, borderColour.B, borderColour.A)
 			renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 1, H: b.h - 1})
 		}
@@ -285,7 +451,7 @@ func (b *SDL_Image) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 			fg = b.fg
 			bg = b.bg
 		} else {
-			fg = widgetColourDim(b.fg, false, 2)
+			fg = widgetColourDim(b.fg, false, 1.5)
 		}
 		if bg != nil {
 			// Background
@@ -354,125 +520,4 @@ func (b *SDL_Separator) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 
 func (b *SDL_Separator) Destroy() {
 	// Image cache takes care of all images!
-}
-
-/****************************************************************************************
-* SDL_Arrow code
-* Implements SDL_Widget cos it is one!
-**/
-type SDL_Arrow struct {
-	SDL_WidgetBase
-	shape   *SDL_Shape
-	rotate  ROTATE_SHAPE_90
-	rect    *sdl.Rect
-	onClick func(SDL_Widget, int32, int32) bool
-}
-
-var _ SDL_Widget = (*SDL_Arrow)(nil) // Ensure SDL_Button 'is a' SDL_Widget
-
-func NewSDLArrow(x, y, w, h, id int32, rot ROTATE_SHAPE_90, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Arrow {
-	but := &SDL_Arrow{onClick: onClick, rotate: rot}
-	but.SDL_WidgetBase = initBase(x, y, w, h, id, deBounce, bgColour, fgColour)
-	but.defineShape()
-	return but
-}
-
-func (b *SDL_Arrow) SetPosition(x, y int32) {
-	b.x = x
-	b.y = y
-	b.defineShape()
-}
-
-func (b *SDL_Arrow) SetSize(w, h int32) {
-	b.w = w
-	b.h = h
-	b.defineShape()
-}
-
-func (b *SDL_Arrow) GetRect() *sdl.Rect {
-	return b.rect
-}
-
-func (b *SDL_Arrow) Inside(x, y int32) bool {
-	if b.visible {
-		return isInsideRect(x, y, b.rect)
-	}
-	return false
-}
-
-func (b *SDL_Arrow) Scale(s float32) {
-	b.SDL_WidgetBase.Scale(s)
-	b.defineShape()
-}
-
-func (b *SDL_Arrow) defineShape() {
-	w := b.w
-	h := b.h
-	x := b.x
-	y := b.y
-	sh := NewSDLShape()
-	switch b.rotate {
-	case ROTATE_0, ROTATE_180:
-		var halfH int32 = h / 2
-		var qtr1H int32 = h / 4
-		var thrd1W int32 = w / 6
-		var thrd2W int32 = thrd1W * 4
-		sh.Add(thrd1W, -qtr1H)
-		sh.Add(thrd2W, -qtr1H)
-		sh.Add(thrd2W, -halfH)
-		sh.Add(w, 0)
-		sh.Add(thrd2W, +halfH)
-		sh.Add(thrd2W, +qtr1H)
-		sh.Add(thrd1W, +qtr1H)
-	case ROTATE_90, ROTATE_270:
-		var halfW int32 = b.w / 2
-		var qtr1W int32 = b.w / 4
-		var thrd1H int32 = b.h / 6
-		var thrd2H int32 = thrd1H * 4
-		sh.Add(qtr1W, thrd1H)
-		sh.Add(qtr1W, thrd2H)
-		sh.Add(halfW, thrd2H)
-		sh.Add(0, h)
-		sh.Add(-halfW, thrd2H)
-		sh.Add(-qtr1W, thrd2H)
-		sh.Add(-qtr1W, thrd1H)
-	}
-	switch b.rotate {
-	case ROTATE_270, ROTATE_180:
-		sh.Rotate(b.rotate)
-	}
-	sh.Offset(x, y)
-	b.rect = sh.GetRect()
-	b.shape = sh
-}
-
-func (b *SDL_Arrow) SetOnClick(f func(SDL_Widget, int32, int32) bool) {
-	b.onClick = f
-}
-
-func (b *SDL_Arrow) Click(x, y int32) bool {
-	if b.enabled && b.visible && b.notPressed && b.onClick != nil {
-		if b.deBounce > 0 {
-			b.notPressed = false
-			defer func() {
-				time.Sleep(time.Millisecond * time.Duration(b.deBounce))
-				b.notPressed = true
-			}()
-		}
-		return b.onClick(b, x, y)
-	}
-	return false
-}
-
-func (b *SDL_Arrow) Destroy() {
-
-}
-
-func (b *SDL_Arrow) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
-	if b.visible {
-		renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
-		gfx.FilledPolygonColor(renderer, b.shape.vx, b.shape.vy, *widgetColourDim(b.bg, b.IsEnabled(), 2))
-		gfx.PolygonColor(renderer, b.shape.vx, b.shape.vy, *widgetColourDim(b.fg, b.IsEnabled(), 2))
-	}
-	return nil
 }

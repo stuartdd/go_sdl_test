@@ -125,6 +125,11 @@ func run() int {
 	arrows := NewSDLWidgetList(nil, LIST_ARROWS)
 	buttonsTR := NewSDLWidgetList(nil, LIST_TOP_RIGHT)
 	additional := NewSDLWidgetList(nil, 999)
+	widgetGroup.Add(buttonsTL)
+	widgetGroup.Add(buttonsTR)
+	widgetGroup.Add(buttonsPaused)
+	widgetGroup.Add(arrows)
+	widgetGroup.Add(additional)
 
 	// Load image resources
 	err = widgetGroup.LoadTexturesFromFiles(renderer, resources, map[string]string{
@@ -216,22 +221,25 @@ func run() int {
 		return true
 	})
 
-	arrowR := NewSDLArrow(arrowPosX, arrowPosY, 100, 100, ARROW_RIGHT, ROTATE_0, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	arrowR := NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_RIGHT, btnBg, btnFg, func(s SDL_Widget, i1, i2 int32) bool {
 		cellOffsetX = cellOffsetX + 100
 		return true
 	})
-	arrowD := NewSDLArrow(arrowPosX, arrowPosY, 100, 100, ARROW_DOWN, ROTATE_90, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	arrowD := NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_DOWN, btnBg, btnFg, func(s SDL_Widget, i1, i2 int32) bool {
 		cellOffsetY = cellOffsetY + 100
 		return true
 	})
-	arrowL := NewSDLArrow(arrowPosX, arrowPosY, 100, 100, ARROW_LEFT, ROTATE_180, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	arrowD.Rotate(90)
+	arrowL := NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_LEFT, btnBg, btnFg, func(s SDL_Widget, i1, i2 int32) bool {
 		cellOffsetX = cellOffsetX - 100
 		return true
 	})
-	arrowU := NewSDLArrow(arrowPosX, arrowPosY, 100, 100, ARROW_UP, ROTATE_270, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	arrowL.Rotate(180)
+	arrowU := NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_UP, btnBg, btnFg, func(s SDL_Widget, i1, i2 int32) bool {
 		cellOffsetY = cellOffsetY - 100
 		return true
 	})
+	arrowU.Rotate(-90)
 
 	buttonsTL.Add(btnClose)
 	buttonsTL.Add(btnStop)
@@ -247,15 +255,9 @@ func run() int {
 	buttonsPaused.Add(labelSpeed)
 
 	arrows.Add(arrowR)
-	arrows.Add(arrowL)
 	arrows.Add(arrowD)
+	arrows.Add(arrowL)
 	arrows.Add(arrowU)
-
-	widgetGroup.Add(buttonsTL)
-	widgetGroup.Add(buttonsTR)
-	widgetGroup.Add(buttonsPaused)
-	widgetGroup.Add(arrows)
-	widgetGroup.Add(additional)
 
 	buttonsPaused.SetVisible(true)
 
@@ -323,7 +325,7 @@ func run() int {
 		widgetGroup.Draw(renderer)
 		if mouseOn {
 			renderer.SetDrawColor(0, 0, 255, 255)
-			renderer.FillRect(&sdl.Rect{X: mouseX - (30 / 2), Y: mouseY - (30 / 2), W: 30, H: 30})
+			renderer.DrawRect(&sdl.Rect{X: mouseX - (30 / 2), Y: mouseY - (30 / 2), W: 30, H: 30})
 		}
 		renderer.Present()
 		sdl.Delay(20)
@@ -383,7 +385,7 @@ func updateButtons(renderer *sdl.Renderer, wg *SDL_WidgetGroup) {
 	for _, l := range ll {
 		switch l.GetId() {
 		case LIST_ARROWS:
-			l.SetVisible(lifeGen.GetRunFor() < 2)
+			l.SetEnable(lifeGen.GetRunFor() < 2)
 		case LIST_TOP_LEFT:
 			x, y = l.ArrangeLR(btnGap, btnMarginTop, btnGap)
 		case LIST_TOP_RIGHT:

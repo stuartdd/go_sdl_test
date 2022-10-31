@@ -23,6 +23,8 @@ const (
 	ROTATE_90
 	ROTATE_180
 	ROTATE_270
+
+	DEG_TO_RAD float64 = (math.Pi / 180)
 )
 
 var TEXTURE_CACHE_TEXT_PREF = "TxCaPr987"
@@ -31,22 +33,21 @@ type SDL_Widget interface {
 	Draw(*sdl.Renderer, *ttf.Font) error
 	Scale(float32)
 	Click(int32, int32) bool
-	Inside(int32, int32) bool    // Base
-	GetRect() *sdl.Rect          // Base
-	SetId(int32)                 // Base
-	GetId() int32                // Base
-	SetVisible(bool)             // Base
-	IsVisible() bool             // Base
-	SetEnabled(bool)             // Base
-	IsEnabled() bool             // Base
-	SetPosition(int32, int32)    // Base
-	GetPosition() (int32, int32) // Base
-	GetNextPosition() *sdl.Rect  // Base
-	SetSize(int32, int32)        // Base
-	GetSize() (int32, int32)     // Base
-	Destroy()                    // Base
-	GetForeground() *sdl.Color   // Base
-	GetBackground() *sdl.Color   // Base
+	Inside(int32, int32) bool      // Base
+	GetRect() *sdl.Rect            // Base
+	SetId(int32)                   // Base
+	GetId() int32                  // Base
+	SetVisible(bool)               // Base
+	IsVisible() bool               // Base
+	SetEnabled(bool)               // Base
+	IsEnabled() bool               // Base
+	SetPosition(int32, int32) bool // Base
+	SetSize(int32, int32) bool     // Base
+	GetPosition() (int32, int32)   // Base
+	GetSize() (int32, int32)       // Base
+	Destroy()                      // Base
+	GetForeground() *sdl.Color     // Base
+	GetBackground() *sdl.Color     // Base
 }
 
 type SDL_TextWidget interface {
@@ -71,76 +72,6 @@ type SDL_TextureCacheWidget interface {
 	GetTextureCache() *SDL_TextureCache
 }
 
-type SDL_Shape struct {
-	vx []int16
-	vy []int16
-}
-
-func NewSDLShape() *SDL_Shape {
-	return &SDL_Shape{vx: make([]int16, 0), vy: make([]int16, 0)}
-}
-
-func (s *SDL_Shape) Add(x, y int32) {
-	s.vx = append(s.vx, int16(x))
-	s.vy = append(s.vy, int16(y))
-}
-
-func (s *SDL_Shape) Offset(x, y int32) {
-	x16 := int16(x)
-	y16 := int16(y)
-	for i := 0; i < len(s.vx); i++ {
-		s.vx[i] = s.vx[i] + x16
-		s.vy[i] = s.vy[i] + y16
-	}
-}
-
-func (s *SDL_Shape) Rotate(rot ROTATE_SHAPE_90) {
-	var xr int16 = 1
-	var yr int16 = 1
-	switch rot {
-	case ROTATE_90:
-		xr = -1
-	case ROTATE_180:
-		xr = -1
-		yr = -1
-	case ROTATE_270:
-		xr = -1
-		yr = -1
-	}
-	for i := 0; i < len(s.vx); i++ {
-		s.vx[i] = s.vx[i] * xr
-		s.vy[i] = s.vy[i] * yr
-	}
-}
-
-func (s *SDL_Shape) Inside(x, y int32) bool {
-	return isInsideRect(x, y, s.GetRect())
-}
-
-func (s *SDL_Shape) GetRect() *sdl.Rect {
-	var minx int16 = math.MaxInt16
-	var miny int16 = math.MaxInt16
-	var maxx int16 = math.MinInt16
-	var maxy int16 = math.MinInt16
-	vx := s.vx
-	vy := s.vy
-	for i := 0; i < len(vx); i++ {
-		if vx[i] < minx {
-			minx = vx[i]
-		}
-		if vx[i] > maxx {
-			maxx = vx[i]
-		}
-		if vy[i] < miny {
-			miny = vy[i]
-		}
-		if vy[i] > maxy {
-			maxy = vy[i]
-		}
-	}
-	return &sdl.Rect{X: int32(minx), Y: int32(miny), W: int32(maxx - minx), H: int32(maxy - miny)}
-}
-
 type SDL_WidgetBase struct {
 	x, y, w, h int32
 	id         int32
@@ -159,22 +90,26 @@ func initBase(x, y, w, h, id int32, deBounce int, bgColour, fgColour *sdl.Color)
 	return SDL_WidgetBase{x: x, y: y, w: w, h: h, id: id, enabled: true, visible: true, notPressed: true, deBounce: deBounce, bg: bgColour, fg: fgColour}
 }
 
-func (b *SDL_WidgetBase) SetPosition(x, y int32) {
-	b.x = x
-	b.y = y
+func (b *SDL_WidgetBase) SetPosition(x, y int32) bool {
+	if b.x != x || b.y != y {
+		b.x = x
+		b.y = y
+		return true
+	}
+	return false
 }
 
 func (b *SDL_WidgetBase) GetPosition() (int32, int32) {
 	return b.x, b.y
 }
 
-func (b *SDL_WidgetBase) SetSize(w, h int32) {
-	b.w = w
-	b.h = h
-}
-
-func (b *SDL_WidgetBase) GetNextPosition() *sdl.Rect {
-	return &sdl.Rect{X: b.x + b.w, Y: b.y + b.h, W: b.w, H: b.h}
+func (b *SDL_WidgetBase) SetSize(w, h int32) bool {
+	if b.w != w || b.h != h {
+		b.w = w
+		b.h = h
+		return true
+	}
+	return false
 }
 
 func (b *SDL_WidgetBase) GetRect() *sdl.Rect {
@@ -591,46 +526,14 @@ func widgetShrinkRect(in *sdl.Rect, by int32) *sdl.Rect {
 	return &sdl.Rect{X: in.X + by, Y: in.Y + by, W: in.W - (by * 2), H: in.H - (by * 2)}
 }
 
-func widgetColourDim(in *sdl.Color, doNothing bool, divBy uint8) *sdl.Color {
+func widgetColourDim(in *sdl.Color, doNothing bool, divBy float32) *sdl.Color {
 	if in == nil {
-		return nil
+		return in
 	}
-	r := in.R
-	g := in.G
-	b := in.B
-	if !doNothing {
-		if in.R > 5 {
-			r = in.R / divBy
-		}
-		if in.G > 5 {
-			g = in.G / divBy
-		}
-		if in.B > 5 {
-			b = in.B / divBy
-		}
+	if doNothing {
+		return in
 	}
-	return &sdl.Color{R: r, G: g, B: b, A: in.A}
-}
-
-func widgetColourBright(in *sdl.Color, doNothing bool) *sdl.Color {
-	if in == nil {
-		return nil
-	}
-	r := in.R
-	g := in.G
-	b := in.B
-	if !doNothing {
-		if in.R < 127 {
-			r = in.R * 2
-		}
-		if in.G < 127 {
-			g = in.G * 2
-		}
-		if in.B < 127 {
-			b = in.B * 2
-		}
-	}
-	return &sdl.Color{R: r, G: g, B: b, A: in.A}
+	return &sdl.Color{R: uint8(float32(in.R) / divBy), G: uint8(float32(in.G) / divBy), B: uint8(float32(in.B) / divBy), A: in.A}
 }
 
 func isInsideRect(x, y int32, r *sdl.Rect) bool {
