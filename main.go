@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"time"
 
 	go_life "github.com/stuartdd/go_life_engine"
 	"github.com/veandco/go-sdl2/sdl"
@@ -64,7 +63,7 @@ var (
 	cellX               int32
 	cellY               int32
 	arrowPosX           int32 = 245
-	arrowPosY           int32 = 180
+	arrowPosY           int32 = 245
 )
 
 func run() int {
@@ -120,17 +119,12 @@ func run() int {
 	viewPort := renderer.GetViewport()
 	cellOffsetX, cellOffsetY = centerOnXY(viewPort.W/2, viewPort.H/2, lifeGen)
 
+	widgetGroup := NewWidgetGroup()
 	buttonsTL := NewSDLWidgetList(font, LIST_TOP_LEFT)
 	buttonsPaused := NewSDLWidgetList(font, LIST_PAUSED)
 	arrows := NewSDLWidgetList(nil, LIST_ARROWS)
 	buttonsTR := NewSDLWidgetList(nil, LIST_TOP_RIGHT)
 	additional := NewSDLWidgetList(nil, 999)
-	widgetGroup := NewWidgetGroup()
-	widgetGroup.Add(buttonsTL)
-	widgetGroup.Add(buttonsTR)
-	widgetGroup.Add(buttonsPaused)
-	widgetGroup.Add(arrows)
-	widgetGroup.Add(additional)
 
 	// Load image resources
 	err = widgetGroup.LoadTexturesFromFiles(renderer, resources, map[string]string{
@@ -222,7 +216,20 @@ func run() int {
 		return true
 	})
 
-	btnX := NewSDLArrow(arrowPosX, arrowPosY, 70, 50, ARROW_RIGHT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	arrowR := NewSDLArrow(arrowPosX, arrowPosY, 100, 100, ARROW_RIGHT, ROTATE_0, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		cellOffsetX = cellOffsetX + 100
+		return true
+	})
+	arrowD := NewSDLArrow(arrowPosX, arrowPosY, 100, 100, ARROW_DOWN, ROTATE_90, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		cellOffsetY = cellOffsetY + 100
+		return true
+	})
+	arrowL := NewSDLArrow(arrowPosX, arrowPosY, 100, 100, ARROW_LEFT, ROTATE_180, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		cellOffsetX = cellOffsetX - 100
+		return true
+	})
+	arrowU := NewSDLArrow(arrowPosX, arrowPosY, 100, 100, ARROW_UP, ROTATE_270, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		cellOffsetY = cellOffsetY - 100
 		return true
 	})
 
@@ -239,29 +246,18 @@ func run() int {
 	buttonsPaused.Add(btnFastest)
 	buttonsPaused.Add(labelSpeed)
 
-	additional.Add(btnX)
-	buttonsPaused.SetVisible(true)
-
-	arrowR := NewSDLArrow(arrowPosX, arrowPosY, 70, 50, ARROW_RIGHT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
-		cellOffsetX = cellOffsetX + 100
-		return true
-	})
-	arrowL := NewSDLArrow(arrowPosX, arrowPosY, -70, 50, ARROW_LEFT, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
-		cellOffsetX = cellOffsetX - 100
-		return true
-	})
-	arrowD := NewSDLArrow(arrowPosX, arrowPosY, 50, 70, ARROW_DOWN, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
-		cellOffsetY = cellOffsetY + 100
-		return true
-	})
-	arrowU := NewSDLArrow(arrowPosX, arrowPosY, 50, -70, ARROW_UP, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
-		cellOffsetY = cellOffsetY - 100
-		return true
-	})
 	arrows.Add(arrowR)
 	arrows.Add(arrowL)
 	arrows.Add(arrowD)
 	arrows.Add(arrowU)
+
+	widgetGroup.Add(buttonsTL)
+	widgetGroup.Add(buttonsTR)
+	widgetGroup.Add(buttonsPaused)
+	widgetGroup.Add(arrows)
+	widgetGroup.Add(additional)
+
+	buttonsPaused.SetVisible(true)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load 'lem': %s\n", err)
@@ -270,9 +266,9 @@ func run() int {
 
 	go func() {
 		for running {
-			time.Sleep(time.Millisecond * 300)
 			labelGen.SetText(fmt.Sprintf("Gen:%d", lifeGen.GetGenerationCount()))
 			updateButtons(renderer, widgetGroup)
+			sdl.Delay(300)
 		}
 	}()
 
@@ -329,7 +325,6 @@ func run() int {
 			renderer.SetDrawColor(0, 0, 255, 255)
 			renderer.FillRect(&sdl.Rect{X: mouseX - (30 / 2), Y: mouseY - (30 / 2), W: 30, H: 30})
 		}
-
 		renderer.Present()
 		sdl.Delay(20)
 	}

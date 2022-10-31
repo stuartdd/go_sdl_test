@@ -363,65 +363,86 @@ func (b *SDL_Separator) Destroy() {
 type SDL_Arrow struct {
 	SDL_WidgetBase
 	shape   *SDL_Shape
+	rotate  ROTATE_SHAPE_90
+	rect    *sdl.Rect
 	onClick func(SDL_Widget, int32, int32) bool
 }
 
 var _ SDL_Widget = (*SDL_Arrow)(nil) // Ensure SDL_Button 'is a' SDL_Widget
 
-func NewSDLArrow(x, y, w, h, id int32, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Arrow {
-	but := &SDL_Arrow{onClick: onClick}
+func NewSDLArrow(x, y, w, h, id int32, rot ROTATE_SHAPE_90, bgColour, fgColour *sdl.Color, deBounce int, onClick func(SDL_Widget, int32, int32) bool) *SDL_Arrow {
+	but := &SDL_Arrow{onClick: onClick, rotate: rot}
 	but.SDL_WidgetBase = initBase(x, y, w, h, id, deBounce, bgColour, fgColour)
 	but.defineShape()
 	return but
 }
 
+func (b *SDL_Arrow) SetPosition(x, y int32) {
+	b.x = x
+	b.y = y
+	b.defineShape()
+}
+
+func (b *SDL_Arrow) SetSize(w, h int32) {
+	b.w = w
+	b.h = h
+	b.defineShape()
+}
+
+func (b *SDL_Arrow) GetRect() *sdl.Rect {
+	return b.rect
+}
+
+func (b *SDL_Arrow) Inside(x, y int32) bool {
+	if b.visible {
+		return isInsideRect(x, y, b.rect)
+	}
+	return false
+}
+
 func (b *SDL_Arrow) Scale(s float32) {
+	b.SDL_WidgetBase.Scale(s)
 	b.defineShape()
 }
 
 func (b *SDL_Arrow) defineShape() {
-	ww := b.w
-	if ww < 0 {
-		ww = ww * -1
-	}
-	hh := b.h
-	if hh < 0 {
-		hh = hh * -1
-	}
 	w := b.w
 	h := b.h
 	x := b.x
 	y := b.y
-
 	sh := NewSDLShape()
-	if ww > hh {
+	switch b.rotate {
+	case ROTATE_0, ROTATE_180:
 		var halfH int32 = h / 2
 		var qtr1H int32 = h / 4
 		var thrd1W int32 = w / 6
 		var thrd2W int32 = thrd1W * 4
-		sh.Add(x+thrd1W, y-qtr1H)
-		sh.Add(x+thrd2W, y-qtr1H)
-		sh.Add(x+thrd2W, y-halfH)
-		sh.Add(x+w, y)
-		sh.Add(x+thrd2W, y+halfH)
-		sh.Add(x+thrd2W, y+qtr1H)
-		sh.Add(x+thrd1W, y+qtr1H)
-	} else {
+		sh.Add(thrd1W, -qtr1H)
+		sh.Add(thrd2W, -qtr1H)
+		sh.Add(thrd2W, -halfH)
+		sh.Add(w, 0)
+		sh.Add(thrd2W, +halfH)
+		sh.Add(thrd2W, +qtr1H)
+		sh.Add(thrd1W, +qtr1H)
+	case ROTATE_90, ROTATE_270:
 		var halfW int32 = b.w / 2
 		var qtr1W int32 = b.w / 4
 		var thrd1H int32 = b.h / 6
 		var thrd2H int32 = thrd1H * 4
-		sh.Add(x+qtr1W, y+thrd1H)
-		sh.Add(x+qtr1W, y+thrd2H)
-		sh.Add(x+halfW, y+thrd2H)
-		sh.Add(x, y+h)
-		sh.Add(x-halfW, y+thrd2H)
-		sh.Add(x-qtr1W, y+thrd2H)
-		sh.Add(x-qtr1W, y+thrd1H)
+		sh.Add(qtr1W, thrd1H)
+		sh.Add(qtr1W, thrd2H)
+		sh.Add(halfW, thrd2H)
+		sh.Add(0, h)
+		sh.Add(-halfW, thrd2H)
+		sh.Add(-qtr1W, thrd2H)
+		sh.Add(-qtr1W, thrd1H)
 	}
-	r := sh.Rect()
-	b.SetPosition(r.X, r.Y)
-	b.SetSize(r.W, r.H)
+	switch b.rotate {
+	case ROTATE_270, ROTATE_180:
+		sh.Rotate(b.rotate)
+	}
+	sh.Offset(x, y)
+	b.rect = sh.GetRect()
 	b.shape = sh
 }
 

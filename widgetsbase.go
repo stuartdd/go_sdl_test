@@ -11,12 +11,18 @@ import (
 )
 
 type ALIGN_TEXT int
+type ROTATE_SHAPE_90 int
 
 const (
 	ALIGN_CENTER ALIGN_TEXT = iota
 	ALIGN_LEFT
 	ALIGN_RIGHT
 	ALIGN_FIT
+
+	ROTATE_0 ROTATE_SHAPE_90 = iota
+	ROTATE_90
+	ROTATE_180
+	ROTATE_270
 )
 
 var TEXTURE_CACHE_TEXT_PREF = "TxCaPr987"
@@ -79,7 +85,39 @@ func (s *SDL_Shape) Add(x, y int32) {
 	s.vy = append(s.vy, int16(y))
 }
 
-func (s *SDL_Shape) Rect() *sdl.Rect {
+func (s *SDL_Shape) Offset(x, y int32) {
+	x16 := int16(x)
+	y16 := int16(y)
+	for i := 0; i < len(s.vx); i++ {
+		s.vx[i] = s.vx[i] + x16
+		s.vy[i] = s.vy[i] + y16
+	}
+}
+
+func (s *SDL_Shape) Rotate(rot ROTATE_SHAPE_90) {
+	var xr int16 = 1
+	var yr int16 = 1
+	switch rot {
+	case ROTATE_90:
+		xr = -1
+	case ROTATE_180:
+		xr = -1
+		yr = -1
+	case ROTATE_270:
+		xr = -1
+		yr = -1
+	}
+	for i := 0; i < len(s.vx); i++ {
+		s.vx[i] = s.vx[i] * xr
+		s.vy[i] = s.vy[i] * yr
+	}
+}
+
+func (s *SDL_Shape) Inside(x, y int32) bool {
+	return isInsideRect(x, y, s.GetRect())
+}
+
+func (s *SDL_Shape) GetRect() *sdl.Rect {
 	var minx int16 = math.MaxInt16
 	var miny int16 = math.MaxInt16
 	var maxx int16 = math.MinInt16
@@ -204,20 +242,7 @@ func (b *SDL_WidgetBase) GetBackground() *sdl.Color {
 
 func (b *SDL_WidgetBase) Inside(x, y int32) bool {
 	if b.visible {
-		r := b.GetRect()
-		if x < r.X {
-			return false
-		}
-		if y < r.Y {
-			return false
-		}
-		if x > (r.X + r.W) {
-			return false
-		}
-		if y > (r.Y + r.H) {
-			return false
-		}
-		return true
+		return isInsideRect(x, y, b.GetRect())
 	}
 	return false
 }
@@ -606,4 +631,20 @@ func widgetColourBright(in *sdl.Color, doNothing bool) *sdl.Color {
 		}
 	}
 	return &sdl.Color{R: r, G: g, B: b, A: in.A}
+}
+
+func isInsideRect(x, y int32, r *sdl.Rect) bool {
+	if x < r.X {
+		return false
+	}
+	if y < r.Y {
+		return false
+	}
+	if x > (r.X + r.W) {
+		return false
+	}
+	if y > (r.Y + r.H) {
+		return false
+	}
+	return true
 }
