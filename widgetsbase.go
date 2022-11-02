@@ -12,6 +12,7 @@ import (
 
 type ALIGN_TEXT int
 type ROTATE_SHAPE_90 int
+type KBD_KEY_MODE int
 
 const (
 	ALIGN_CENTER ALIGN_TEXT = iota
@@ -53,7 +54,7 @@ type SDL_Widget interface {
 type SDL_CanFocus interface {
 	SetFocus(focus bool)
 	HasFocus() bool
-	KeyPress(byte, bool) bool
+	KeyPress(int, bool, bool) bool
 }
 
 type SDL_TextWidget interface {
@@ -241,9 +242,9 @@ func (wg *SDL_WidgetGroup) SetFont(font *ttf.Font) {
 	wg.font = font
 }
 
-func (wg *SDL_WidgetGroup) KeyPress(c byte, ws bool) bool {
+func (wg *SDL_WidgetGroup) KeyPress(c int, ctrl, down bool) bool {
 	for _, wList := range wg.wigetLists {
-		if wList.KeyPress(c, ws) {
+		if wList.KeyPress(c, ctrl, down) {
 			return true
 		}
 	}
@@ -377,12 +378,12 @@ func (wl *SDL_WidgetList) GetFocused() SDL_CanFocus {
 	return nil
 }
 
-func (wl *SDL_WidgetList) KeyPress(c byte, ws bool) bool {
+func (wl *SDL_WidgetList) KeyPress(c int, ctrl, down bool) bool {
 	for _, w := range wl.list {
 		f, ok := w.(SDL_CanFocus)
 		if ok {
 			if f.HasFocus() {
-				if f.KeyPress(c, ws) {
+				if f.KeyPress(c, ctrl, down) {
 					return true
 				}
 			}

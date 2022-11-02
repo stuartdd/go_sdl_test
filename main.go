@@ -28,7 +28,8 @@ const (
 	LIST_TOP_RIGHT
 	LABEL_GEN
 	LABEL_SPEED
-	PATH_ENTRY
+	PATH_ENTRY1
+	PATH_ENTRY2
 	ARROW_UP
 	ARROW_DOWN
 	ARROW_LEFT
@@ -200,7 +201,8 @@ func run() int {
 
 	labelGen := NewSDLLabel(0, 0, 290, btnHeight, LABEL_GEN, "Gen:0", ALIGN_LEFT, btnBg, btnFg)
 	labelSpeed := NewSDLLabel(0, 0, 270, btnHeight, LABEL_SPEED, "Delay:0ms", ALIGN_LEFT, btnBg, btnFg)
-	pathEntry := NewSDLEntry(0, 0, 300, btnHeight, PATH_ENTRY, "The Qui", btnBg, btnFg)
+	pathEntry1 := NewSDLEntry(0, 0, 300, btnHeight, PATH_ENTRY1, "The Quick Brown Fox", btnBg, btnFg)
+	pathEntry2 := NewSDLEntry(0, 0, 300, btnHeight, PATH_ENTRY2, "The rainbow", btnBg, btnFg)
 
 	btnStep := NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
 		lifeGen.SetRunFor(1, nil)
@@ -255,7 +257,8 @@ func run() int {
 	buttonsPaused.Add(btnFaster)
 	buttonsPaused.Add(btnFastest)
 	buttonsPaused.Add(labelSpeed)
-	buttonsPaused.Add(pathEntry)
+	buttonsPaused.Add(pathEntry1)
+	buttonsPaused.Add(pathEntry2)
 
 	arrows.Add(arrowR)
 	arrows.Add(arrowD)
@@ -291,17 +294,19 @@ func run() int {
 			case *sdl.QuitEvent:
 				running = false
 			case *sdl.TextInputEvent:
-				widgetGroup.KeyPress(t.GetText()[0], false)
+				for _, c := range t.GetText() {
+					widgetGroup.KeyPress(int(c), false, true)
+				}
 			case *sdl.KeyboardEvent:
 				ks := t.Keysym.Sym
-				if t.State == sdl.PRESSED && (ks < 32 || ks == 127) {
+				if t.State == sdl.PRESSED {
 					if ks == sdl.K_ESCAPE {
 						running = false
 					} else {
-						if ks < 32 || ks == 127 {
-							widgetGroup.KeyPress(byte(ks), true)
-						}
+						widgetGroup.KeyPress(int(ks), true, true)
 					}
+				} else {
+					widgetGroup.KeyPress(int(ks), true, false)
 				}
 			case *sdl.MouseMotionEvent:
 				mouseX = t.X
@@ -312,6 +317,7 @@ func run() int {
 					y := t.Y
 					w := widgetGroup.Inside(x, y)
 					if w != nil {
+						widgetGroup.SetFocus(w.GetId(), true)
 						go w.Click(x, y)
 					} else {
 						cellOffsetX, cellOffsetY = centerOnXY(x, y, lifeGen)
