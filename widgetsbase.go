@@ -50,6 +50,12 @@ type SDL_Widget interface {
 	GetBackground() *sdl.Color     // Base
 }
 
+type SDL_CanFocus interface {
+	SetFocus(focus bool)
+	HasFocus() bool
+	KeyPress(byte, bool) bool
+}
+
 type SDL_TextWidget interface {
 	SetTextureCache(*SDL_TextureCache)
 	GetTextureCache() *SDL_TextureCache
@@ -76,7 +82,7 @@ type SDL_WidgetBase struct {
 	x, y, w, h int32
 	id         int32
 	visible    bool
-	enabled    bool
+	_enabled   bool
 	notPressed bool
 	deBounce   int
 	bg         *sdl.Color
@@ -87,7 +93,7 @@ type SDL_WidgetBase struct {
 * Common (base) functions for ALL SDL_Widget instances
 **/
 func initBase(x, y, w, h, id int32, deBounce int, bgColour, fgColour *sdl.Color) SDL_WidgetBase {
-	return SDL_WidgetBase{x: x, y: y, w: w, h: h, id: id, enabled: true, visible: true, notPressed: true, deBounce: deBounce, bg: bgColour, fg: fgColour}
+	return SDL_WidgetBase{x: x, y: y, w: w, h: h, id: id, _enabled: true, visible: true, notPressed: true, deBounce: deBounce, bg: bgColour, fg: fgColour}
 }
 
 func (b *SDL_WidgetBase) SetPosition(x, y int32) bool {
@@ -152,11 +158,11 @@ func (b *SDL_WidgetBase) IsVisible() bool {
 }
 
 func (b *SDL_WidgetBase) SetEnabled(e bool) {
-	b.enabled = e
+	b._enabled = e
 }
 
 func (b *SDL_WidgetBase) IsEnabled() bool {
-	return b.enabled && b.notPressed
+	return b._enabled && b.notPressed && b.visible
 }
 
 func (b *SDL_WidgetBase) SetDeBounce(db int) {
@@ -209,6 +215,22 @@ func (wg *SDL_WidgetGroup) AllWidgets() []SDL_Widget {
 	return l
 }
 
+func (wg *SDL_WidgetGroup) SetFocus(id int32, focus bool) {
+	for _, wList := range wg.wigetLists {
+		wList.SetFocus(id, focus)
+	}
+}
+
+func (wg *SDL_WidgetGroup) GetFocused() SDL_CanFocus {
+	for _, wList := range wg.wigetLists {
+		f := wList.GetFocused()
+		if f != nil {
+			return f
+		}
+	}
+	return nil
+}
+
 func (wg *SDL_WidgetGroup) AllLists() []*SDL_WidgetList {
 	l := make([]*SDL_WidgetList, 0)
 	l = append(l, wg.wigetLists...)
@@ -217,6 +239,15 @@ func (wg *SDL_WidgetGroup) AllLists() []*SDL_WidgetList {
 
 func (wg *SDL_WidgetGroup) SetFont(font *ttf.Font) {
 	wg.font = font
+}
+
+func (wg *SDL_WidgetGroup) KeyPress(c byte, ws bool) bool {
+	for _, wList := range wg.wigetLists {
+		if wList.KeyPress(c, ws) {
+			return true
+		}
+	}
+	return false
 }
 
 func (wg *SDL_WidgetGroup) GetFont() *ttf.Font {
@@ -323,6 +354,41 @@ func (wl *SDL_WidgetList) Inside(x, y int32) SDL_Widget {
 
 func (wl *SDL_WidgetList) ListWidgets() []SDL_Widget {
 	return wl.list
+}
+
+func (wl *SDL_WidgetList) SetFocus(id int32, focus bool) {
+	for _, w := range wl.list {
+		f, ok := w.(SDL_CanFocus)
+		if ok {
+			f.SetFocus(w.GetId() == id)
+		}
+	}
+}
+
+func (wl *SDL_WidgetList) GetFocused() SDL_CanFocus {
+	for _, w := range wl.list {
+		f, ok := w.(SDL_CanFocus)
+		if ok {
+			if f.HasFocus() {
+				return f
+			}
+		}
+	}
+	return nil
+}
+
+func (wl *SDL_WidgetList) KeyPress(c byte, ws bool) bool {
+	for _, w := range wl.list {
+		f, ok := w.(SDL_CanFocus)
+		if ok {
+			if f.HasFocus() {
+				if f.KeyPress(c, ws) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func (wl *SDL_WidgetList) ArrangeLR(xx, yy, padding int32) (int32, int32) {

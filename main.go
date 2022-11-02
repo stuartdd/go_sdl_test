@@ -28,6 +28,7 @@ const (
 	LIST_TOP_RIGHT
 	LABEL_GEN
 	LABEL_SPEED
+	PATH_ENTRY
 	ARROW_UP
 	ARROW_DOWN
 	ARROW_LEFT
@@ -199,6 +200,7 @@ func run() int {
 
 	labelGen := NewSDLLabel(0, 0, 290, btnHeight, LABEL_GEN, "Gen:0", ALIGN_LEFT, btnBg, btnFg)
 	labelSpeed := NewSDLLabel(0, 0, 270, btnHeight, LABEL_SPEED, "Delay:0ms", ALIGN_LEFT, btnBg, btnFg)
+	pathEntry := NewSDLEntry(0, 0, 300, btnHeight, PATH_ENTRY, "The Qui", btnBg, btnFg)
 
 	btnStep := NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
 		lifeGen.SetRunFor(1, nil)
@@ -253,6 +255,7 @@ func run() int {
 	buttonsPaused.Add(btnFaster)
 	buttonsPaused.Add(btnFastest)
 	buttonsPaused.Add(labelSpeed)
+	buttonsPaused.Add(pathEntry)
 
 	arrows.Add(arrowR)
 	arrows.Add(arrowD)
@@ -287,6 +290,19 @@ func run() int {
 			switch t := event.(type) {
 			case *sdl.QuitEvent:
 				running = false
+			case *sdl.TextInputEvent:
+				widgetGroup.KeyPress(t.GetText()[0], false)
+			case *sdl.KeyboardEvent:
+				ks := t.Keysym.Sym
+				if t.State == sdl.PRESSED && (ks < 32 || ks == 127) {
+					if ks == sdl.K_ESCAPE {
+						running = false
+					} else {
+						if ks < 32 || ks == 127 {
+							widgetGroup.KeyPress(byte(ks), true)
+						}
+					}
+				}
 			case *sdl.MouseMotionEvent:
 				mouseX = t.X
 				mouseY = t.Y

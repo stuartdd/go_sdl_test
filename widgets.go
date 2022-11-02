@@ -81,7 +81,7 @@ func (s *SDL_Shape) Add(x, y int32) {
 }
 
 func (b *SDL_Shape) Click(x, y int32) bool {
-	if b.enabled && b.visible && b.notPressed && b.onClick != nil {
+	if b.IsEnabled() && b.onClick != nil {
 		if b.deBounce > 0 {
 			b.notPressed = false
 			defer func() {
@@ -134,7 +134,6 @@ func (s *SDL_Shape) Inside(x, y int32) bool {
 
 func (s *SDL_Shape) GetRect() *sdl.Rect {
 	if s.validRect == nil {
-		fmt.Println("Rect Invalid")
 		count := len(s.vxIn)
 		vxOut := make([]int16, count)
 		vyOut := make([]int16, count)
@@ -321,7 +320,7 @@ func (b *SDL_Button) GetTextureCache() *SDL_TextureCache {
 }
 
 func (b *SDL_Button) Click(x, y int32) bool {
-	if b.enabled && b.visible && b.notPressed && b.onClick != nil {
+	if b.IsEnabled() && b.onClick != nil {
 		if b.deBounce > 0 {
 			b.notPressed = false
 			defer func() {
@@ -428,7 +427,7 @@ func (b *SDL_Image) GetTextureCache() *SDL_TextureCache {
 }
 
 func (b *SDL_Image) Click(x, y int32) bool {
-	if b.enabled && b.visible && b.notPressed && b.onClick != nil {
+	if b.IsEnabled() && b.onClick != nil {
 		if b.deBounce > 0 {
 			b.notPressed = false
 			defer func() {
