@@ -122,6 +122,8 @@ func run() int {
 	cellOffsetX, cellOffsetY = centerOnXY(viewPort.W/2, viewPort.H/2, lifeGen)
 
 	widgetGroup := NewWidgetGroup()
+	defer widgetGroup.Destroy()
+
 	buttonsTL := NewSDLWidgetList(font, LIST_TOP_LEFT)
 	buttonsPaused := NewSDLWidgetList(font, LIST_PAUSED)
 	arrows := NewSDLWidgetList(nil, LIST_ARROWS)
@@ -134,7 +136,7 @@ func run() int {
 	widgetGroup.Add(additional)
 
 	// Load image resources
-	err = widgetGroup.LoadTexturesFromFiles(renderer, resources, map[string]string{
+	err = widgetGroup.LoadTexturesFromFileMap(renderer, resources, map[string]string{
 		"lem":     "lem.png",
 		"slower":  "slower.png",
 		"faster":  "faster.png",
@@ -148,7 +150,7 @@ func run() int {
 		return 1
 	}
 
-	err = widgetGroup.LoadTexturesFromText(renderer, map[string]string{
+	err = widgetGroup.LoadTexturesFromStringMap(renderer, map[string]string{
 		"numbers": "0123456789",
 	}, font, btnFg)
 
@@ -156,7 +158,6 @@ func run() int {
 		fmt.Fprintf(os.Stderr, "Failed to load text textures: %s\n", err)
 		return 1
 	}
-	defer widgetGroup.Destroy()
 
 	btnClose := NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_CLOSE, "Quit", btnBg, btnFg, 0, func(b SDL_Widget, i1, i2 int32) bool {
 		running = false

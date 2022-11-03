@@ -263,16 +263,16 @@ func (wg *SDL_WidgetGroup) GetTextureCache() *SDL_TextureCache {
 	return wg.textureCache
 }
 
-func (wg *SDL_WidgetGroup) LoadTexturesFromFiles(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
-	return wg.textureCache.LoadTexturesFromFiles(renderer, applicationDataPath, fileNames)
+func (wg *SDL_WidgetGroup) LoadTexturesFromFileMap(renderer *sdl.Renderer, applicationDataPath string, fileMap map[string]string) error {
+	return wg.textureCache.LoadTexturesFromFileMap(renderer, applicationDataPath, fileMap)
 }
 
-func (wg *SDL_WidgetGroup) LoadTexturesFromText(renderer *sdl.Renderer, textMap map[string]string, font *ttf.Font, colour *sdl.Color) error {
-	return wg.textureCache.LoadTexturesFromText(renderer, textMap, font, colour)
+func (wg *SDL_WidgetGroup) LoadTexturesFromStringMap(renderer *sdl.Renderer, textMap map[string]string, font *ttf.Font, colour *sdl.Color) error {
+	return wg.textureCache.LoadTexturesFromStringMap(renderer, textMap, font, colour)
 }
 
-func (wl *SDL_WidgetGroup) GetTexture(name string) (*sdl.Texture, *sdl.Rect, error) {
-	return wl.textureCache.GetTexture(name)
+func (wl *SDL_WidgetGroup) GetTextureForName(name string) (*sdl.Texture, int32, int32, error) {
+	return wl.textureCache.GetTextureForName(name)
 }
 
 func (wg *SDL_WidgetGroup) Scale(s float32) {
@@ -286,6 +286,7 @@ func (wg *SDL_WidgetGroup) Destroy() {
 		w.Destroy()
 	}
 	wg.textureCache.Destroy()
+	fmt.Println(wg.textureCache.String())
 }
 
 func (wg *SDL_WidgetGroup) Draw(renderer *sdl.Renderer) {
@@ -322,18 +323,18 @@ func (wl *SDL_WidgetList) GetId() int32 {
 	return wl.id
 }
 
-func (wl *SDL_WidgetList) LoadTexturesFromFiles(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
+func (wl *SDL_WidgetList) LoadTexturesFromFiles(renderer *sdl.Renderer, applicationDataPath string, fileMap map[string]string) error {
 	if wl.textureCache == nil {
 		wl.textureCache = NewTextureCache()
 	}
-	return wl.textureCache.LoadTexturesFromFiles(renderer, applicationDataPath, fileNames)
+	return wl.textureCache.LoadTexturesFromFileMap(renderer, applicationDataPath, fileMap)
 }
 
-func (wl *SDL_WidgetList) GetTexture(name string) (*sdl.Texture, *sdl.Rect, error) {
+func (wl *SDL_WidgetList) GetTextureForName(name string) (*sdl.Texture, int32, int32, error) {
 	if wl.textureCache == nil {
-		return nil, nil, fmt.Errorf("texture cache for SDL_WidgetList.GetTexture is nil")
+		return nil, 0, 0, fmt.Errorf("texture cache for SDL_WidgetList.GetTexture is nil")
 	}
-	return wl.textureCache.GetTexture(name)
+	return wl.textureCache.GetTextureForName(name)
 }
 
 func (wl *SDL_WidgetList) Add(widget SDL_Widget) {
@@ -447,6 +448,9 @@ func (wl *SDL_WidgetList) GetFont() *ttf.Font {
 }
 
 func (wl *SDL_WidgetList) SetTextureCache(textureCache *SDL_TextureCache) {
+	if wl.textureCache != nil {
+		wl.textureCache.Destroy()
+	}
 	wl.textureCache = textureCache
 }
 
@@ -467,108 +471,24 @@ func (wl *SDL_WidgetList) Destroy() {
 }
 
 /****************************************************************************************
-* Texture cache for widgets that have text to display.
-* Textures are sdl resources and need to be Destroyed.
-* SDL_Widgets destroys all textures via the SDL_Widgets Destroy() function.
-*
-* USE:	widigts := NewSDLWidgets(font)
-* 		defer widigts.Destroy()
+* Texture cache Entry used to hold ALL textures in the SDL_TextureCache
 **/
-
 type SDL_TextureCacheEntry struct {
-	clipRect *sdl.Rect
-	texture  *sdl.Texture
-	name     string
+	Texture      *sdl.Texture
+	value        string
+	W, H, Offset int32
 }
 
-func (tce *SDL_TextureCacheEntry) Destroy() {
-	if tce.texture != nil {
-		tce.texture.Destroy()
+func (tce *SDL_TextureCacheEntry) Destroy() int {
+	if tce.Texture != nil {
+		tce.Texture.Destroy()
+		tce.value = ""
+		return 1
 	}
+	return 0
 }
 
-type SDL_TextureCache struct {
-	textureMap map[string]*SDL_TextureCacheEntry
-}
-
-func NewTextureCache() *SDL_TextureCache {
-	return &SDL_TextureCache{textureMap: make(map[string]*SDL_TextureCacheEntry)}
-}
-
-func (tc *SDL_TextureCache) Merge(fromCache *SDL_TextureCache) {
-	if fromCache == nil {
-		return
-	}
-	for n, v := range fromCache.textureMap {
-		tc.textureMap[n] = v
-	}
-}
-
-func (tc *SDL_TextureCache) Destroy() {
-	for _, v := range tc.textureMap {
-		v.Destroy()
-	}
-}
-
-// func (tc *SDL_TextureCache) LoadTextures(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
-// }
-func (tc *SDL_TextureCache) LoadTexturesFromText(renderer *sdl.Renderer, textMap map[string]string, font *ttf.Font, colour *sdl.Color) error {
-	for name, text := range textMap {
-		tce, err := getTextureCacheEntryForText(renderer, text, name, font, colour)
-		if err != nil {
-			return err
-		}
-		tc.textureMap[name] = tce
-	}
-	return nil
-}
-
-func (tc *SDL_TextureCache) LoadTexturesFromFiles(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
-	for name, fileName := range fileNames {
-		var fn string
-		if applicationDataPath == "" {
-			fn = fileName
-		} else {
-			fn = filepath.Join(applicationDataPath, fileName)
-		}
-		texture, rect, err := loadTextureFile(renderer, fn)
-		if err != nil {
-			return fmt.Errorf("file '%s':%s", fileName, err.Error())
-		}
-		tc.textureMap[name] = &SDL_TextureCacheEntry{name: name, texture: texture, clipRect: rect}
-	}
-	return nil
-}
-
-func (tc *SDL_TextureCache) GetTexture(name string) (*sdl.Texture, *sdl.Rect, error) {
-	tce := tc.textureMap[name]
-	if tce == nil {
-		return nil, nil, fmt.Errorf("texture cache does not contain %s", name)
-	}
-	return tce.texture, tce.clipRect, nil
-}
-
-/****************************************************************************************
-* Utilities
-* getCachedTextWidgetEntry Returns cached texture data
-*
-* widgetColourDim takes a colour and returns a dimmer by same colour. Used for disabled widget text
-* widgetColourBright takes a colour and returns a brighter by same colour. Used for Widget Borders
-*
-**/
-func loadTextureFile(renderer *sdl.Renderer, fileName string) (*sdl.Texture, *sdl.Rect, error) {
-	texture, err := img.LoadTexture(renderer, fileName)
-	if err != nil {
-		return nil, nil, err
-	}
-	_, _, t3, t4, err := texture.Query()
-	if err != nil {
-		return nil, nil, err
-	}
-	return texture, &sdl.Rect{X: 0, Y: 0, W: t3, H: t4}, nil
-}
-
-func getTextureCacheEntryForText(renderer *sdl.Renderer, text, name string, font *ttf.Font, colour *sdl.Color) (*SDL_TextureCacheEntry, error) {
+func NewTextureCacheEntryForString(renderer *sdl.Renderer, text, name string, font *ttf.Font, colour *sdl.Color) (*SDL_TextureCacheEntry, error) {
 	if colour == nil {
 		colour = &sdl.Color{R: 255, G: 255, B: 255, A: 255}
 	}
@@ -583,7 +503,124 @@ func getTextureCacheEntryForText(renderer *sdl.Renderer, text, name string, font
 	if err != nil {
 		return nil, err
 	}
-	return &SDL_TextureCacheEntry{texture: txt, clipRect: &clip, name: name}, nil
+	return &SDL_TextureCacheEntry{Texture: txt, W: clip.W, H: clip.H}, nil
+}
+
+/****************************************************************************************
+* Texture cache for widgets that have textures to display.
+* Textures are sdl resources and need to be Destroyed.
+* SDL_WidgetList destroys all textures via the SDL_Widgets Destroy() function.
+* SDL_WidgetGroup destroys all textures via SDL_WidgetsGroup Destroy() function
+* USE:		widgetGroup := NewWidgetGroup()
+*       	defer widgetGroup.Destroy()
+**/
+type SDL_TextureCache struct {
+	_textureMap map[string]*SDL_TextureCacheEntry
+	in, out     int
+}
+
+func NewTextureCache() *SDL_TextureCache {
+	return &SDL_TextureCache{_textureMap: make(map[string]*SDL_TextureCacheEntry), in: 0, out: 0}
+}
+
+func (tc *SDL_TextureCache) Get(name string) (*SDL_TextureCacheEntry, bool) {
+	tce, ok := tc._textureMap[name]
+	return tce, ok
+}
+
+func (tc *SDL_TextureCache) String() string {
+	return fmt.Sprintf("TextureCache in:%d out:%d", tc.in, tc.out)
+}
+
+func (tc *SDL_TextureCache) Add(name string, tceIn *SDL_TextureCacheEntry) {
+	tce := tc._textureMap[name]
+	if tce != nil {
+		tc.out = tc.out + tce.Destroy()
+	}
+	tc._textureMap[name] = tceIn
+	tc.in++
+}
+
+func (tc *SDL_TextureCache) Remove(name string, tceIn *SDL_TextureCacheEntry) {
+	tce := tc._textureMap[name]
+	if tce != nil {
+		tc.out = tc.out + tce.Destroy()
+	}
+	tc._textureMap[name] = nil
+}
+
+func (tc *SDL_TextureCache) Merge(fromCache *SDL_TextureCache) {
+	if fromCache == nil {
+		return
+	}
+	for n, v := range fromCache._textureMap {
+		tc.Add(n, v)
+	}
+}
+
+func (tc *SDL_TextureCache) Destroy() {
+	for n, tce := range tc._textureMap {
+		if tce != nil {
+			tc.out = tc.out + tce.Destroy()
+		}
+		tc._textureMap[n] = nil
+	}
+}
+
+func (tc *SDL_TextureCache) LoadTexturesFromStringMap(renderer *sdl.Renderer, textMap map[string]string, font *ttf.Font, colour *sdl.Color) error {
+	for name, text := range textMap {
+		tce, err := NewTextureCacheEntryForString(renderer, text, name, font, colour)
+		if err != nil {
+			return err
+		}
+		tc.Add(name, tce)
+	}
+	return nil
+}
+
+func (tc *SDL_TextureCache) LoadTexturesFromFileMap(renderer *sdl.Renderer, applicationDataPath string, fileNames map[string]string) error {
+	for name, fileName := range fileNames {
+		var fn string
+		if applicationDataPath == "" {
+			fn = fileName
+		} else {
+			fn = filepath.Join(applicationDataPath, fileName)
+		}
+		texture, rect, err := loadTextureFromFilename(renderer, fn)
+		if err != nil {
+			return fmt.Errorf("file '%s':%s", fileName, err.Error())
+		}
+		tc.Add(name, &SDL_TextureCacheEntry{Texture: texture, W: rect.W, H: rect.H, value: ""})
+	}
+	return nil
+}
+
+func (tc *SDL_TextureCache) GetTextureForName(name string) (*sdl.Texture, int32, int32, error) {
+	tce := tc._textureMap[name]
+	if tce == nil {
+		return nil, 0, 0, fmt.Errorf("texture cache does not contain %s", name)
+	}
+	return tce.Texture, tce.W, tce.H, nil
+}
+
+/****************************************************************************************
+* Utilities
+* getCachedTextWidgetEntry Returns cached texture data
+*
+* widgetColourDim takes a colour and returns a dimmer by same colour. Used for disabled widget text
+* widgetColourBright takes a colour and returns a brighter by same colour. Used for Widget Borders
+*
+**/
+func loadTextureFromFilename(renderer *sdl.Renderer, fileName string) (*sdl.Texture, *sdl.Rect, error) {
+	texture, err := img.LoadTexture(renderer, fileName)
+	if err != nil {
+		return nil, nil, err
+	}
+	_, _, t3, t4, err := texture.Query()
+	if err != nil {
+		return nil, nil, err
+	}
+	return texture, &sdl.Rect{X: 0, Y: 0, W: t3, H: t4}, nil
 }
 
 func widgetShrinkRect(in *sdl.Rect, by int32) *sdl.Rect {

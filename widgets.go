@@ -232,18 +232,18 @@ func (b *SDL_Label) Click(x, y int32) bool {
 
 func (b *SDL_Label) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 	if b.IsVisible() {
-		ctwe, ok := b.textureCache.textureMap[b.cacheKey]
+		ctwe, ok := b.textureCache.Get(b.cacheKey)
 		if !ok || b.cacheInvalid {
 			var err error
-			ctwe, err = getTextureCacheEntryForText(renderer, b.text, b.cacheKey, font, widgetColourDim(b.fg, b.IsEnabled(), 2))
+			ctwe, err = NewTextureCacheEntryForString(renderer, b.text, b.cacheKey, font, widgetColourDim(b.fg, b.IsEnabled(), 2))
 			if err != nil {
 				renderer.SetDrawColor(255, 0, 0, 255)
 				renderer.DrawRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
 				return nil
 			}
-			b.textureCache.textureMap[b.cacheKey] = ctwe
+			b.textureCache.Add(b.cacheKey, ctwe)
 			if b.align == ALIGN_FIT {
-				b.SetSize(ctwe.clipRect.W, b.h)
+				b.SetSize(ctwe.W, b.h)
 			}
 		}
 		aspect := float32(b.w) / float32(b.h)
@@ -265,7 +265,7 @@ func (b *SDL_Label) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 			renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
 			renderer.FillRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
 		}
-		renderer.Copy(ctwe.texture, nil, &sdl.Rect{X: b.x + int32(tx), Y: b.y + int32(ty), W: int32(tw), H: int32(th)})
+		renderer.Copy(ctwe.Texture, nil, &sdl.Rect{X: b.x + int32(tx), Y: b.y + int32(ty), W: int32(tw), H: int32(th)})
 		if b.fg != nil {
 			borderColour := widgetColourDim(b.fg, b.IsEnabled(), 2)
 			renderer.SetDrawColor(borderColour.R, borderColour.G, borderColour.B, borderColour.A)
@@ -340,16 +340,16 @@ func (b *SDL_Button) Destroy() {
 func (b *SDL_Button) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 	if b.visible {
 		var cacheKey = fmt.Sprintf("%s.%s.%t", TEXTURE_CACHE_TEXT_PREF, b.text, b.IsEnabled() && b.notPressed)
-		ctwe, ok := b.textureCache.textureMap[cacheKey]
+		ctwe, ok := b.textureCache.Get(cacheKey)
 		if !ok {
 			var err error
-			ctwe, err = getTextureCacheEntryForText(renderer, b.text, cacheKey, font, widgetColourDim(b.fg, b.IsEnabled(), 2))
+			ctwe, err = NewTextureCacheEntryForString(renderer, b.text, cacheKey, font, widgetColourDim(b.fg, b.IsEnabled(), 2))
 			if err != nil {
 				renderer.SetDrawColor(255, 0, 0, 255)
 				renderer.DrawRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
 				return nil
 			}
-			b.textureCache.textureMap[cacheKey] = ctwe
+			b.textureCache.Add(cacheKey, ctwe)
 		}
 		if b.bg != nil {
 			renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
@@ -362,7 +362,7 @@ func (b *SDL_Button) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		tw := th * aspect
 		tx := (float32(b.w) - tw) / 2
 		ty := (float32(b.h) - th) / 2
-		renderer.Copy(ctwe.texture, nil, &sdl.Rect{X: b.x + int32(tx), Y: b.y + int32(ty), W: int32(tw), H: int32(th)})
+		renderer.Copy(ctwe.Texture, nil, &sdl.Rect{X: b.x + int32(tx), Y: b.y + int32(ty), W: int32(tw), H: int32(th)})
 		if b.fg != nil {
 			borderColour := widgetColourDim(b.fg, b.IsEnabled(), 2)
 			renderer.SetDrawColor(borderColour.R, borderColour.G, borderColour.B, borderColour.A)
@@ -457,7 +457,7 @@ func (b *SDL_Image) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 			renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
 			renderer.FillRect(borderRect)
 		}
-		image, ir, err := b.textureCache.GetTexture(b.textureName)
+		image, irw, _, err := b.textureCache.GetTextureForName(b.textureName)
 		if err != nil {
 			renderer.SetDrawColor(255, 0, 0, 255)
 			renderer.DrawRect(&sdl.Rect{X: b.x, Y: b.y, W: 100, H: 100})
@@ -467,7 +467,7 @@ func (b *SDL_Image) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 			outRect = widgetShrinkRect(outRect, 4)
 		}
 		if b.frameCount > 1 {
-			w := (ir.W / b.frameCount)
+			w := (irw / b.frameCount)
 			x := (w * b.frame)
 			inRect := &sdl.Rect{X: x, Y: 0, W: w, H: outRect.H}
 			outRect := &sdl.Rect{X: outRect.X, Y: outRect.Y, W: w, H: outRect.H}
