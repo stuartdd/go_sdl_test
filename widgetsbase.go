@@ -13,6 +13,7 @@ import (
 type ALIGN_TEXT int
 type ROTATE_SHAPE_90 int
 type KBD_KEY_MODE int
+type TEXT_CHANGE_TYPE int
 
 const (
 	ALIGN_CENTER ALIGN_TEXT = iota
@@ -24,6 +25,12 @@ const (
 	ROTATE_90
 	ROTATE_180
 	ROTATE_270
+
+	TEXT_CHANGE_INSERT TEXT_CHANGE_TYPE = iota
+	TEXT_CHANGE_DELETE
+	TEXT_CHANGE_BS
+	TEXT_CHANGE_FENISH
+	TEXT_CHANGE_NONE
 
 	DEG_TO_RAD float64 = (math.Pi / 180)
 )
@@ -554,13 +561,18 @@ func NewTextureCache() *SDL_TextureCache {
 	return &SDL_TextureCache{_textureMap: make(map[string]*SDL_TextureCacheEntry), in: 0, out: 0}
 }
 
+func (tc *SDL_TextureCache) String() string {
+	return fmt.Sprintf("TextureCache in:%d out:%d", tc.in, tc.out)
+}
+
+func (tc *SDL_TextureCache) Peek(name string) bool {
+	_, ok := tc._textureMap[name]
+	return ok
+}
+
 func (tc *SDL_TextureCache) Get(name string) (*SDL_TextureCacheEntry, bool) {
 	tce, ok := tc._textureMap[name]
 	return tce, ok
-}
-
-func (tc *SDL_TextureCache) String() string {
-	return fmt.Sprintf("TextureCache in:%d out:%d", tc.in, tc.out)
 }
 
 func (tc *SDL_TextureCache) Add(name string, tceIn *SDL_TextureCacheEntry) {

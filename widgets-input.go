@@ -15,22 +15,26 @@ import (
 type SDL_Entry struct {
 	SDL_WidgetBase
 	text         string
+	textLen      int
 	history      []string
 	cursor       int
 	cursorTimer  int
 	hasfocus     bool
 	ctrlKeyDown  bool
 	textureCache *SDL_TextureCache
-	inalid       bool
+	invalid      bool
 	leadin       int
 	leadout      int
+	indent       int32
+	maxDispLen   int
+	onChange     func(string, string, TEXT_CHANGE_TYPE) string
 }
 
 var _ SDL_Widget = (*SDL_Entry)(nil)   // Ensure SDL_Button 'is a' SDL_Widget
 var _ SDL_CanFocus = (*SDL_Entry)(nil) // Ensure SDL_Button 'is a' SDL_Widget
 
-func NewSDLEntry(x, y, w, h, id int32, text string, bgColour, fgColour *sdl.Color) *SDL_Entry {
-	but := &SDL_Entry{text: text, textureCache: nil, cursor: 0, cursorTimer: 0, leadin: 0, leadout: 0, hasfocus: false, ctrlKeyDown: false, inalid: true}
+func NewSDLEntry(x, y, w, h, id int32, text string, bgColour, fgColour *sdl.Color, onChange func(string, string, TEXT_CHANGE_TYPE) string) *SDL_Entry {
+	but := &SDL_Entry{text: text, textLen: len(text), textureCache: nil, cursor: 0, cursorTimer: 0, leadin: 0, leadout: 0, maxDispLen: 0, hasfocus: false, ctrlKeyDown: false, invalid: true, indent: 10, onChange: onChange}
 	but.SDL_WidgetBase = initBase(x, y, w, h, id, 0, bgColour, fgColour)
 	return but
 }
@@ -50,28 +54,20 @@ func (b *SDL_Entry) SetForeground(c *sdl.Color) {
 	}
 }
 
-func (b *SDL_Entry) pushHistory() {
+func (b *SDL_Entry) pushHistory(val string) {
+	fmt.Println(val)
 	if len(b.history) > 0 {
-		if (b.history)[len(b.history)-1] == b.text {
+		if (b.history)[len(b.history)-1] == val {
 			return
 		}
 	}
-	b.history = append(b.history, b.text)
-}
-
-func (b *SDL_Entry) popHistory() bool {
-	if len(b.history) > 0 {
-		b.text = (b.history)[len(b.history)-1]
-		b.history = (b.history)[0 : len(b.history)-1]
-		b.invalidate()
-		return true
-	}
-	return false
+	b.history = append(b.history, val)
 }
 
 func (b *SDL_Entry) SetText(text string) {
 	if b.text != text {
 		b.text = text
+		b.textLen = len(b.text)
 		b.invalidate()
 	}
 }
@@ -94,6 +90,9 @@ func (b *SDL_Entry) HasFocus() bool {
 
 func (b *SDL_Entry) KeyPress(c int, ctrl bool, down bool) bool {
 	if b.IsEnabled() && b.HasFocus() {
+		oldValue := b.text
+		newValue := b.text
+		onChangeType := TEXT_CHANGE_NONE
 		if ctrl {
 			// if ctrl key then just remember its state (up or down)
 			if c == sdl.K_LCTRL || c == sdl.K_RCTRL {
@@ -102,66 +101,83 @@ func (b *SDL_Entry) KeyPress(c int, ctrl bool, down bool) bool {
 			}
 			// if the control key is down then it is a control sequence like CTRL-Z
 			if b.ctrlKeyDown {
-				b.popHistory()
-				b.SetCursor(b.cursor) // Ensure cursor is in range
-				return true
-			}
-			// If it is NOT a ctrl key or a control sequence then we only react on a DOWN
-			if down {
-				if c < 32 || c == 127 {
-					switch c {
-					case sdl.K_DELETE:
-						if b.cursor < len(b.text) {
-							b.pushHistory()
-							b.text = fmt.Sprintf("%s%s", b.text[0:b.cursor], b.text[b.cursor+1:])
-							b.invalidate()
-						}
-					case sdl.K_BACKSPACE:
-						if b.cursor > 0 {
-							b.pushHistory()
-							if b.cursor < len(b.text) {
-								b.text = fmt.Sprintf("%s%s", b.text[0:b.cursor-1], b.text[b.cursor:])
-							} else {
-								b.text = b.text[0 : len(b.text)-1]
-							}
-							b.MoveCursor(-1)
-							b.invalidate()
-						}
-					case sdl.K_RETURN:
-						fmt.Println("CR")
-					default:
-						fmt.Printf("??:%d", c)
-						return false
-					}
-				} else {
-					switch c | 0x40000000 {
-					case sdl.K_RIGHT:
-						b.MoveCursor(1)
-					case sdl.K_UP:
-						b.SetCursor(99)
-					case sdl.K_DOWN:
-						b.SetCursor(0)
-					case sdl.K_LEFT:
-						b.MoveCursor(-1)
-					default:
-						return false
-					}
+				if len(b.history) > 0 {
+					newValue = (b.history)[len(b.history)-1]
+					b.history = (b.history)[0 : len(b.history)-1]
 				}
 			} else {
-				// If it is NOT a ctrl key or a control sequence then we ignore an UP
-				return false
+				if down {
+					if c < 32 || c == 127 {
+						switch c {
+						case sdl.K_DELETE:
+							if b.cursor < b.textLen {
+								newValue = fmt.Sprintf("%s%s", oldValue[0:b.cursor], oldValue[b.cursor+1:])
+								onChangeType = TEXT_CHANGE_DELETE
+							}
+						case sdl.K_BACKSPACE:
+							if b.cursor > 0 {
+								if b.cursor < b.textLen {
+									newValue = fmt.Sprintf("%s%s", oldValue[0:b.cursor-1], oldValue[b.cursor:])
+								} else {
+									newValue = oldValue[0 : b.textLen-1]
+								}
+								onChangeType = TEXT_CHANGE_BS
+							}
+						case sdl.K_RETURN:
+							if b.onChange != nil {
+								b.onChange("", b.text, TEXT_CHANGE_FENISH)
+							}
+						default:
+							fmt.Printf("??:%d", c)
+							return false
+						}
+					} else {
+						switch c | 0x40000000 {
+						case sdl.K_RIGHT:
+							b.MoveCursor(1)
+						case sdl.K_UP:
+							b.SetCursor(99)
+						case sdl.K_DOWN:
+							b.SetCursor(0)
+						case sdl.K_LEFT:
+							b.MoveCursor(-1)
+						default:
+							return false
+						}
+					}
+				} else {
+					// If it is NOT a ctrl key or a control sequence then we ignore an UP
+					return false
+				}
 			}
+			// If it is NOT a ctrl key or a control sequence then we only react on a DOWN
+
 		} else {
 			// not a control key. insert it at the cursor
-			b.pushHistory()
-			b.text = fmt.Sprintf("%s%c%s", b.text[0:b.cursor], c, b.text[b.cursor:])
-			b.MoveCursor(1)
-			b.invalidate()
+			newValue = fmt.Sprintf("%s%c%s", oldValue[0:b.cursor], c, oldValue[b.cursor:])
+			onChangeType = TEXT_CHANGE_INSERT
 		}
-		return true
-	} else {
-		return false
+		if b.leadin > 0 && b.leadin == b.cursor {
+			b.leadin--
+		}
+		if oldValue != newValue && b.onChange != nil {
+			newValue = b.onChange(oldValue, newValue, onChangeType)
+		}
+		if newValue != oldValue {
+			b.pushHistory(oldValue)
+			b.text = newValue
+			b.textLen = len(b.text)
+			switch onChangeType {
+			case TEXT_CHANGE_INSERT:
+				b.MoveCursor(1)
+			case TEXT_CHANGE_BS:
+				b.MoveCursor(-1)
+			}
+			b.invalidate()
+			return true
+		}
 	}
+	return false
 }
 
 func (b *SDL_Entry) SetCursor(i int) {
@@ -169,8 +185,8 @@ func (b *SDL_Entry) SetCursor(i int) {
 		if i < 0 {
 			i = 0
 		}
-		if i > len(b.text) {
-			i = len(b.text)
+		if i > b.textLen {
+			i = b.textLen
 		}
 		b.cursor = i
 	}
@@ -194,10 +210,11 @@ func (b *SDL_Entry) GetText() string {
 func (b *SDL_Entry) Click(x, y int32) bool {
 	if b.IsEnabled() {
 		list := b.getTextureListFromCache()
-		cur := b.x
-		for i, ec := range list {
-			if x > cur {
-				b.SetCursor(i)
+		cur := b.x + b.indent
+		for pos := b.leadin; pos < b.leadout; pos++ {
+			ec := list[pos]
+			if cur > x {
+				b.SetCursor(pos)
 				return true
 			}
 			cur = cur + ec.W
@@ -211,7 +228,7 @@ func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 	if b.IsVisible() {
 		var err error
 		var ec *SDL_TextureCacheEntry
-		if b.inalid {
+		if b.invalid {
 			err = b.updateTextureCache(renderer, font, b.fg, b.text)
 			if err != nil {
 				renderer.SetDrawColor(255, 0, 0, 255)
@@ -228,10 +245,11 @@ func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		ty := (float32(b.h) - th) / 2
 
 		// *******************************************************
-		tx := b.x
+		tx := b.x + b.indent
 		cc := 0
 		list := b.getTextureListFromCache()
-		for pos := b.leadin; pos < len(b.text); pos++ {
+		b.leadout = b.textLen
+		for pos := b.leadin; pos < b.textLen; pos++ {
 			ec = list[pos]
 			tx = tx + ec.W
 			cc++
@@ -239,6 +257,14 @@ func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 				b.leadout = pos
 				break
 			}
+		}
+		if b.maxDispLen < cc {
+			b.maxDispLen = cc
+		}
+		if b.maxDispLen > b.textLen {
+			b.leadin = 0
+			b.leadout = b.textLen
+			b.maxDispLen = b.textLen
 		}
 		if b.cursor > b.leadout {
 			b.leadout = b.cursor
@@ -248,9 +274,15 @@ func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 			b.leadin = b.cursor
 			b.leadout = b.leadin + cc
 		}
+		if b.leadin < 0 {
+			b.leadin = 0
+		}
+		if b.leadout > b.textLen {
+			b.leadout = b.textLen
+		}
 
 		//*********************************************************
-		tx = b.x + 10
+		tx = b.x + int32(b.indent)
 		cursorNotVisible := true
 		paintCursor := b.IsEnabled() && b.HasFocus() && (sdl.GetTicks64()%1000) > 300
 		for pos := b.leadin; pos < b.leadout; pos++ {
@@ -269,10 +301,15 @@ func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 			renderer.SetDrawColor(255, 255, 255, 255)
 			renderer.FillRect(&sdl.Rect{X: tx, Y: b.y, W: 2, H: b.h})
 		}
-		if b.fg != nil {
-			borderColour := widgetColourDim(b.fg, b.IsEnabled(), 2)
-			renderer.SetDrawColor(borderColour.R, borderColour.G, borderColour.B, borderColour.A)
-			renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 1, H: b.h - 1})
+		if b.hasfocus {
+			renderer.SetDrawColor(255, 0, 0, 255)
+			renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 2, H: b.h - 2})
+		} else {
+			if b.fg != nil {
+				borderColour := widgetColourDim(b.fg, b.IsEnabled(), 2)
+				renderer.SetDrawColor(borderColour.R, borderColour.G, borderColour.B, borderColour.A)
+				renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 2, H: b.h - 2})
+			}
 		}
 	}
 	return nil
@@ -283,11 +320,15 @@ func (b *SDL_Entry) Destroy() {
 
 func (b *SDL_Entry) updateTextureCache(renderer *sdl.Renderer, font *ttf.Font, colour *sdl.Color, text string) error {
 	for _, c := range text {
-		ec, err := NewTextureCacheEntryForRune(renderer, c, font, colour)
-		if err != nil {
-			return err
+		key := string(c) + "-cHaR"
+		ok := b.textureCache.Peek(key)
+		if !ok {
+			ec, err := NewTextureCacheEntryForRune(renderer, c, font, colour)
+			if err != nil {
+				return err
+			}
+			b.textureCache.Add(key, ec)
 		}
-		b.textureCache.Add(fmt.Sprintf("cha[%c]", c), ec)
 	}
 	return nil
 }
@@ -295,12 +336,15 @@ func (b *SDL_Entry) updateTextureCache(renderer *sdl.Renderer, font *ttf.Font, c
 func (b *SDL_Entry) getTextureListFromCache() []*SDL_TextureCacheEntry {
 	list := make([]*SDL_TextureCacheEntry, len(b.text))
 	for i, c := range b.text {
-		ec, _ := b.textureCache.Get(fmt.Sprintf("cha[%c]", c))
+		ec, _ := b.textureCache.Get(string(c) + "-cHaR")
 		list[i] = ec
 	}
 	return list
 }
 
 func (b *SDL_Entry) invalidate() {
-	b.inalid = true
+	go func() {
+		sdl.Delay(100)
+		b.invalid = true
+	}()
 }

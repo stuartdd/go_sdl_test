@@ -269,7 +269,7 @@ func (b *SDL_Label) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		if b.fg != nil {
 			borderColour := widgetColourDim(b.fg, b.IsEnabled(), 2)
 			renderer.SetDrawColor(borderColour.R, borderColour.G, borderColour.B, borderColour.A)
-			renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 1, H: b.h - 1})
+			renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 2, H: b.h - 2})
 		}
 	}
 	return nil
@@ -366,7 +366,7 @@ func (b *SDL_Button) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		if b.fg != nil {
 			borderColour := widgetColourDim(b.fg, b.IsEnabled(), 2)
 			renderer.SetDrawColor(borderColour.R, borderColour.G, borderColour.B, borderColour.A)
-			renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 1, H: b.h - 1})
+			renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 2, H: b.h - 2})
 		}
 	}
 	return nil
@@ -478,7 +478,7 @@ func (b *SDL_Image) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		// Border
 		if fg != nil {
 			renderer.SetDrawColor(fg.R, fg.G, fg.B, fg.A)
-			renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 1, H: b.h - 1})
+			renderer.DrawRect(&sdl.Rect{X: b.x + 1, Y: b.y + 1, W: b.w - 2, H: b.h - 2})
 		}
 	}
 	return nil
