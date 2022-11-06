@@ -202,8 +202,8 @@ func run() int {
 
 	labelGen := NewSDLLabel(0, 0, 290, btnHeight, LABEL_GEN, "Gen:0", ALIGN_LEFT, btnBg, btnFg)
 	labelSpeed := NewSDLLabel(0, 0, 270, btnHeight, LABEL_SPEED, "Delay:0ms", ALIGN_LEFT, btnBg, btnFg)
-	pathEntry1 := NewSDLEntry(0, 0, 300, btnHeight, PATH_ENTRY1, "The Quick Brown Fox", btnBg, btnFg)
-	pathEntry2 := NewSDLEntry(0, 0, 300, btnHeight, PATH_ENTRY2, "The rainbow", btnBg, btnFg)
+	pathEntry2 := NewSDLEntry(0, 0, 300, btnHeight, PATH_ENTRY1, "The Quick Brown Fox", btnBg, btnFg)
+	pathEntry1 := NewSDLEntry(0, 0, 300, btnHeight, PATH_ENTRY2, "The rainbow", btnBg, btnFg)
 
 	btnStep := NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
 		lifeGen.SetRunFor(1, nil)

@@ -14,47 +14,33 @@ import (
 **/
 type SDL_Entry struct {
 	SDL_WidgetBase
-	text        string
-	history     []string
-	cursor      int
-	cursorTimer int
-	hasfocus    bool
-	ctrlKeyDown bool
-	list        []*SDL_TextureCacheEntry
-	leadin      int
-	leadout     int
+	text         string
+	history      []string
+	cursor       int
+	cursorTimer  int
+	hasfocus     bool
+	ctrlKeyDown  bool
+	textureCache *SDL_TextureCache
+	inalid       bool
+	leadin       int
+	leadout      int
 }
 
 var _ SDL_Widget = (*SDL_Entry)(nil)   // Ensure SDL_Button 'is a' SDL_Widget
 var _ SDL_CanFocus = (*SDL_Entry)(nil) // Ensure SDL_Button 'is a' SDL_Widget
 
-func newEntryChar(renderer *sdl.Renderer, font *ttf.Font, colour *sdl.Color, char rune) (*SDL_TextureCacheEntry, error) {
-	if colour == nil {
-		colour = &sdl.Color{R: 255, G: 255, B: 255, A: 255}
-	}
-	surface, err := font.RenderUTF8Blended(string(char), *colour)
-	if err != nil {
-		return nil, err
-	}
-	defer surface.Free()
-
-	clip := surface.ClipRect
-	// Dont destroy the texture. Call Destroy on the SDL_Widgets object to destroy ALL cached textures
-	txt, err := renderer.CreateTextureFromSurface(surface)
-	if err != nil {
-		return nil, err
-	}
-	return &SDL_TextureCacheEntry{Texture: txt, value: string(char), W: clip.W, H: clip.H, Offset: 0}, nil
-}
-
-func (ec *SDL_TextureCacheEntry) String() string {
-	return fmt.Sprintf("'%s' w:%d h:%d offset:%d", ec.value, ec.W, ec.H, ec.Offset)
-}
-
 func NewSDLEntry(x, y, w, h, id int32, text string, bgColour, fgColour *sdl.Color) *SDL_Entry {
-	but := &SDL_Entry{text: text, list: nil, cursor: 0, cursorTimer: 0, leadin: 0, leadout: 0, hasfocus: false, ctrlKeyDown: false}
+	but := &SDL_Entry{text: text, textureCache: nil, cursor: 0, cursorTimer: 0, leadin: 0, leadout: 0, hasfocus: false, ctrlKeyDown: false, inalid: true}
 	but.SDL_WidgetBase = initBase(x, y, w, h, id, 0, bgColour, fgColour)
 	return but
+}
+
+func (b *SDL_Entry) SetTextureCache(tc *SDL_TextureCache) {
+	b.textureCache = tc
+}
+
+func (b *SDL_Entry) GetTextureCache() *SDL_TextureCache {
+	return b.textureCache
 }
 
 func (b *SDL_Entry) SetForeground(c *sdl.Color) {
@@ -196,7 +182,7 @@ func (b *SDL_Entry) MoveCursor(i int) {
 
 func (b *SDL_Entry) SetEnabled(e bool) {
 	if b.IsEnabled() != e {
-		b.list = nil
+		b.invalidate()
 		b.SDL_WidgetBase.SetEnabled(e)
 	}
 }
@@ -207,16 +193,16 @@ func (b *SDL_Entry) GetText() string {
 
 func (b *SDL_Entry) Click(x, y int32) bool {
 	if b.IsEnabled() {
-		if b.list != nil {
-			for i := b.leadin; i < len(b.text); i++ {
-				ec := b.list[i]
-				if x < (ec.Offset + ec.W) {
-					b.SetCursor(i)
-					return true
-				}
+		list := b.getTextureListFromCache()
+		cur := b.x
+		for i, ec := range list {
+			if x > cur {
+				b.SetCursor(i)
+				return true
 			}
-			b.SetCursor(b.leadout)
+			cur = cur + ec.W
 		}
+		b.SetCursor(b.leadout)
 	}
 	return false
 }
@@ -224,8 +210,9 @@ func (b *SDL_Entry) Click(x, y int32) bool {
 func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 	if b.IsVisible() {
 		var err error
-		if b.list == nil {
-			b.list, err = b.buildImage(renderer, font, b.fg, b.text)
+		var ec *SDL_TextureCacheEntry
+		if b.inalid {
+			err = b.updateTextureCache(renderer, font, b.fg, b.text)
 			if err != nil {
 				renderer.SetDrawColor(255, 0, 0, 255)
 				renderer.DrawRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
@@ -241,28 +228,24 @@ func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		ty := (float32(b.h) - th) / 2
 
 		// *******************************************************
-		tx := b.x + 10
+		tx := b.x
 		cc := 0
+		list := b.getTextureListFromCache()
 		for pos := b.leadin; pos < len(b.text); pos++ {
-			ec := b.list[pos]
-			ec.Offset = tx
+			ec = list[pos]
 			tx = tx + ec.W
 			cc++
-			if tx+ec.W >= b.x+b.w {
+			if tx >= b.x+b.w {
+				b.leadout = pos
 				break
 			}
 		}
-
+		if b.cursor > b.leadout {
+			b.leadout = b.cursor
+			b.leadin = b.leadout - (cc - 1)
+		}
 		if b.cursor < b.leadin {
 			b.leadin = b.cursor
-		}
-		b.leadout = b.leadin + cc
-
-		if b.cursor > b.leadout {
-			b.leadin = b.cursor - cc
-			if b.leadin < 0 {
-				b.leadin = 0
-			}
 			b.leadout = b.leadin + cc
 		}
 
@@ -271,7 +254,7 @@ func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		cursorNotVisible := true
 		paintCursor := b.IsEnabled() && b.HasFocus() && (sdl.GetTicks64()%1000) > 300
 		for pos := b.leadin; pos < b.leadout; pos++ {
-			ec := b.list[pos]
+			ec := list[pos]
 			renderer.Copy(ec.Texture, nil, &sdl.Rect{X: tx, Y: b.y + int32(ty), W: ec.W, H: ec.H})
 			if paintCursor {
 				if pos == b.cursor {
@@ -298,18 +281,26 @@ func (b *SDL_Entry) Destroy() {
 	// Image cache takes care of all images!
 }
 
-func (b *SDL_Entry) buildImage(renderer *sdl.Renderer, font *ttf.Font, colour *sdl.Color, text string) ([]*SDL_TextureCacheEntry, error) {
-	list := make([]*SDL_TextureCacheEntry, 0)
+func (b *SDL_Entry) updateTextureCache(renderer *sdl.Renderer, font *ttf.Font, colour *sdl.Color, text string) error {
 	for _, c := range text {
-		ec, err := newEntryChar(renderer, font, colour, c)
+		ec, err := NewTextureCacheEntryForRune(renderer, c, font, colour)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		list = append(list, ec)
+		b.textureCache.Add(fmt.Sprintf("cha[%c]", c), ec)
 	}
-	return list, nil
+	return nil
+}
+
+func (b *SDL_Entry) getTextureListFromCache() []*SDL_TextureCacheEntry {
+	list := make([]*SDL_TextureCacheEntry, len(b.text))
+	for i, c := range b.text {
+		ec, _ := b.textureCache.Get(fmt.Sprintf("cha[%c]", c))
+		list[i] = ec
+	}
+	return list
 }
 
 func (b *SDL_Entry) invalidate() {
-	b.list = nil
+	b.inalid = true
 }

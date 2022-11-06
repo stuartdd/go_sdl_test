@@ -235,7 +235,7 @@ func (b *SDL_Label) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		ctwe, ok := b.textureCache.Get(b.cacheKey)
 		if !ok || b.cacheInvalid {
 			var err error
-			ctwe, err = NewTextureCacheEntryForString(renderer, b.text, b.cacheKey, font, widgetColourDim(b.fg, b.IsEnabled(), 2))
+			ctwe, err = NewTextureCacheEntryForString(renderer, b.text, font, widgetColourDim(b.fg, b.IsEnabled(), 2))
 			if err != nil {
 				renderer.SetDrawColor(255, 0, 0, 255)
 				renderer.DrawRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
@@ -343,7 +343,7 @@ func (b *SDL_Button) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 		ctwe, ok := b.textureCache.Get(cacheKey)
 		if !ok {
 			var err error
-			ctwe, err = NewTextureCacheEntryForString(renderer, b.text, cacheKey, font, widgetColourDim(b.fg, b.IsEnabled(), 2))
+			ctwe, err = NewTextureCacheEntryForString(renderer, b.text, font, widgetColourDim(b.fg, b.IsEnabled(), 2))
 			if err != nil {
 				renderer.SetDrawColor(255, 0, 0, 255)
 				renderer.DrawRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
