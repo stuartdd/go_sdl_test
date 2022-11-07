@@ -23,18 +23,18 @@ type SDL_Entry struct {
 	ctrlKeyDown  bool
 	textureCache *SDL_TextureCache
 	invalid      bool
+	errorState   error
 	leadin       int
 	leadout      int
 	indent       int32
-	maxDispLen   int
-	onChange     func(string, string, TEXT_CHANGE_TYPE) string
+	onChange     func(string, string, TEXT_CHANGE_TYPE) (string, error)
 }
 
 var _ SDL_Widget = (*SDL_Entry)(nil)   // Ensure SDL_Button 'is a' SDL_Widget
 var _ SDL_CanFocus = (*SDL_Entry)(nil) // Ensure SDL_Button 'is a' SDL_Widget
 
-func NewSDLEntry(x, y, w, h, id int32, text string, bgColour, fgColour *sdl.Color, onChange func(string, string, TEXT_CHANGE_TYPE) string) *SDL_Entry {
-	but := &SDL_Entry{text: text, textLen: len(text), textureCache: nil, cursor: 0, cursorTimer: 0, leadin: 0, leadout: 0, maxDispLen: 0, hasfocus: false, ctrlKeyDown: false, invalid: true, indent: 10, onChange: onChange}
+func NewSDLEntry(x, y, w, h, id int32, text string, bgColour, fgColour *sdl.Color, onChange func(string, string, TEXT_CHANGE_TYPE) (string, error)) *SDL_Entry {
+	but := &SDL_Entry{text: text, textLen: len(text), textureCache: nil, cursor: 0, cursorTimer: 0, leadin: 0, leadout: 0, hasfocus: false, ctrlKeyDown: false, invalid: true, indent: 10, onChange: onChange, errorState: nil}
 	but.SDL_WidgetBase = initBase(x, y, w, h, id, 0, bgColour, fgColour)
 	return but
 }
@@ -54,8 +54,11 @@ func (b *SDL_Entry) SetForeground(c *sdl.Color) {
 	}
 }
 
+func (b *SDL_Entry) SetErrorState(err error) {
+	b.errorState = err
+}
+
 func (b *SDL_Entry) pushHistory(val string) {
-	fmt.Println(val)
 	if len(b.history) > 0 {
 		if (b.history)[len(b.history)-1] == val {
 			return
@@ -90,9 +93,11 @@ func (b *SDL_Entry) HasFocus() bool {
 
 func (b *SDL_Entry) KeyPress(c int, ctrl bool, down bool) bool {
 	if b.IsEnabled() && b.HasFocus() {
+		var err error
 		oldValue := b.text
 		newValue := b.text
 		onChangeType := TEXT_CHANGE_NONE
+		saveHistory := true
 		if ctrl {
 			// if ctrl key then just remember its state (up or down)
 			if c == sdl.K_LCTRL || c == sdl.K_RCTRL {
@@ -101,9 +106,12 @@ func (b *SDL_Entry) KeyPress(c int, ctrl bool, down bool) bool {
 			}
 			// if the control key is down then it is a control sequence like CTRL-Z
 			if b.ctrlKeyDown {
-				if len(b.history) > 0 {
-					newValue = (b.history)[len(b.history)-1]
-					b.history = (b.history)[0 : len(b.history)-1]
+				if c == sdl.K_z {
+					if len(b.history) > 0 {
+						newValue = (b.history)[len(b.history)-1]
+						b.history = (b.history)[0 : len(b.history)-1]
+						saveHistory = false
+					}
 				}
 			} else {
 				if down {
@@ -146,7 +154,7 @@ func (b *SDL_Entry) KeyPress(c int, ctrl bool, down bool) bool {
 						}
 					}
 				} else {
-					// If it is NOT a ctrl key or a control sequence then we ignore an UP
+					// If it is NOT down then we ignore an
 					return false
 				}
 			}
@@ -157,14 +165,14 @@ func (b *SDL_Entry) KeyPress(c int, ctrl bool, down bool) bool {
 			newValue = fmt.Sprintf("%s%c%s", oldValue[0:b.cursor], c, oldValue[b.cursor:])
 			onChangeType = TEXT_CHANGE_INSERT
 		}
-		if b.leadin > 0 && b.leadin == b.cursor {
-			b.leadin--
-		}
 		if oldValue != newValue && b.onChange != nil {
-			newValue = b.onChange(oldValue, newValue, onChangeType)
+			newValue, err = b.onChange(oldValue, newValue, onChangeType)
+			b.SetErrorState(err)
 		}
 		if newValue != oldValue {
-			b.pushHistory(oldValue)
+			if saveHistory {
+				b.pushHistory(oldValue)
+			}
 			b.text = newValue
 			b.textLen = len(b.text)
 			switch onChangeType {
@@ -236,53 +244,53 @@ func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 				return nil
 			}
 		}
-		if b.bg != nil {
-			renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
-			renderer.FillRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
-		}
-		inset := float32(b.h) / 4
-		th := float32(b.h) - inset
-		ty := (float32(b.h) - th) / 2
 
 		// *******************************************************
+		// Find the number of chars thet can be displayed 'cc'
 		tx := b.x + b.indent
 		cc := 0
-		list := b.getTextureListFromCache()
+		if b.leadin < 0 { // Ensure leadin is not negative
+			b.leadin = 0
+		}
 		b.leadout = b.textLen
+		list := b.getTextureListFromCache() // Get the textures and their widths
+		// work out how many chars will fit in the rectangle
 		for pos := b.leadin; pos < b.textLen; pos++ {
 			ec = list[pos]
 			tx = tx + ec.W
-			cc++
 			if tx >= b.x+b.w {
-				b.leadout = pos
 				break
 			}
+			cc++
 		}
-		if b.maxDispLen < cc {
-			b.maxDispLen = cc
+
+		if b.leadin > 0 && cc == 0 {
+			b.leadin--
+			cc++
 		}
-		if b.maxDispLen > b.textLen {
-			b.leadin = 0
-			b.leadout = b.textLen
-			b.maxDispLen = b.textLen
+
+		if b.leadin > 0 && b.leadin == b.cursor {
+			b.leadin--
 		}
+		b.leadout = b.leadin + cc
 		if b.cursor > b.leadout {
-			b.leadout = b.cursor
-			b.leadin = b.leadout - (cc - 1)
-		}
-		if b.cursor < b.leadin {
-			b.leadin = b.cursor
+			b.leadin = b.cursor - cc
 			b.leadout = b.leadin + cc
-		}
-		if b.leadin < 0 {
-			b.leadin = 0
-		}
-		if b.leadout > b.textLen {
-			b.leadout = b.textLen
 		}
 
 		//*********************************************************
+		if b.bg != nil {
+			if b.errorState != nil {
+				renderer.SetDrawColor(100, 0, 0, b.bg.A)
+			} else {
+				renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
+			}
+			renderer.FillRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
+		}
 		tx = b.x + int32(b.indent)
+		th := float32(b.h) - float32(b.h)/4
+		ty := (float32(b.h) - th) / 2
+
 		cursorNotVisible := true
 		paintCursor := b.IsEnabled() && b.HasFocus() && (sdl.GetTicks64()%1000) > 300
 		for pos := b.leadin; pos < b.leadout; pos++ {

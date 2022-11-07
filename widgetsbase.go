@@ -118,12 +118,16 @@ func (b *SDL_WidgetBase) GetPosition() (int32, int32) {
 }
 
 func (b *SDL_WidgetBase) SetSize(w, h int32) bool {
-	if b.w != w || b.h != h {
+	changed := false
+	if w > 0 && b.w != w {
 		b.w = w
-		b.h = h
-		return true
+		changed = true
 	}
-	return false
+	if h > 0 && b.h != h {
+		b.h = h
+		changed = true
+	}
+	return changed
 }
 
 func (b *SDL_WidgetBase) GetRect() *sdl.Rect {
@@ -215,8 +219,8 @@ func (wg *SDL_WidgetGroup) Add(widgetList *SDL_WidgetList) {
 	wg.wigetLists = append(wg.wigetLists, widgetList)
 }
 
-func (wg *SDL_WidgetGroup) AllWidgets() []SDL_Widget {
-	l := make([]SDL_Widget, 0)
+func (wg *SDL_WidgetGroup) AllWidgets() []*SDL_Widget {
+	l := make([]*SDL_Widget, 0)
 	for _, wList := range wg.wigetLists {
 		l = append(l, wList.ListWidgets()...)
 	}
@@ -316,14 +320,14 @@ func (wg *SDL_WidgetGroup) Inside(x, y int32) SDL_Widget {
 * Container for SDL_Widget instances.
 **/
 type SDL_WidgetList struct {
-	list         []SDL_Widget
+	list         []*SDL_Widget
 	font         *ttf.Font
 	textureCache *SDL_TextureCache
 	id           int32
 }
 
 func NewSDLWidgetList(font *ttf.Font, id int32) *SDL_WidgetList {
-	return &SDL_WidgetList{textureCache: nil, list: make([]SDL_Widget, 0), font: font, id: id}
+	return &SDL_WidgetList{textureCache: nil, list: make([]*SDL_Widget, 0), font: font, id: id}
 }
 
 func (wl *SDL_WidgetList) GetId() int32 {
@@ -349,34 +353,34 @@ func (wl *SDL_WidgetList) Add(widget SDL_Widget) {
 	if ok {
 		tw.SetTextureCache(wl.textureCache)
 	}
-	wl.list = append(wl.list, widget)
+	wl.list = append(wl.list, &widget)
 }
 
 func (wl *SDL_WidgetList) Inside(x, y int32) SDL_Widget {
 	for _, w := range wl.list {
-		if w.Inside(x, y) {
-			return w
+		if (*w).Inside(x, y) {
+			return (*w)
 		}
 	}
 	return nil
 }
 
-func (wl *SDL_WidgetList) ListWidgets() []SDL_Widget {
+func (wl *SDL_WidgetList) ListWidgets() []*SDL_Widget {
 	return wl.list
 }
 
 func (wl *SDL_WidgetList) SetFocus(id int32, focus bool) {
 	for _, w := range wl.list {
-		f, ok := w.(SDL_CanFocus)
+		f, ok := (*w).(SDL_CanFocus)
 		if ok {
-			f.SetFocus(w.GetId() == id)
+			f.SetFocus((*w).GetId() == id)
 		}
 	}
 }
 
 func (wl *SDL_WidgetList) GetFocused() SDL_CanFocus {
 	for _, w := range wl.list {
-		f, ok := w.(SDL_CanFocus)
+		f, ok := (*w).(SDL_CanFocus)
 		if ok {
 			if f.HasFocus() {
 				return f
@@ -388,7 +392,7 @@ func (wl *SDL_WidgetList) GetFocused() SDL_CanFocus {
 
 func (wl *SDL_WidgetList) KeyPress(c int, ctrl, down bool) bool {
 	for _, w := range wl.list {
-		f, ok := w.(SDL_CanFocus)
+		f, ok := (*w).(SDL_CanFocus)
 		if ok {
 			if f.HasFocus() {
 				if f.KeyPress(c, ctrl, down) {
@@ -403,12 +407,13 @@ func (wl *SDL_WidgetList) KeyPress(c int, ctrl, down bool) bool {
 func (wl *SDL_WidgetList) ArrangeLR(xx, yy, padding int32) (int32, int32) {
 	x := xx
 	y := yy
-	var w int32
-	for _, wid := range wl.list {
-		if wid.IsVisible() {
-			wid.SetPosition(x, y)
-			w, _ = wid.GetSize()
-			x = x + w + padding
+	var width int32
+	var w *SDL_Widget
+	for _, w = range wl.list {
+		if (*w).IsVisible() {
+			(*w).SetPosition(x, y)
+			width, _ = (*w).GetSize()
+			x = x + width + padding
 		}
 	}
 	return x, y
@@ -417,12 +422,12 @@ func (wl *SDL_WidgetList) ArrangeLR(xx, yy, padding int32) (int32, int32) {
 func (wl *SDL_WidgetList) ArrangeRL(xx, yy, padding int32) (int32, int32) {
 	x := xx
 	y := yy
-	var w int32
-	for _, wid := range wl.list {
-		if wid.IsVisible() {
-			w, _ = wid.GetSize()
-			wid.SetPosition(x-w, y)
-			x = (x - w) - padding
+	var width int32
+	for _, w := range wl.list {
+		if (*w).IsVisible() {
+			width, _ = (*w).GetSize()
+			(*w).SetPosition(x-width, y)
+			x = (x - width) - padding
 		}
 	}
 	return x, y
@@ -430,19 +435,19 @@ func (wl *SDL_WidgetList) ArrangeRL(xx, yy, padding int32) (int32, int32) {
 
 func (wl *SDL_WidgetList) SetEnable(e bool) {
 	for _, w := range wl.list {
-		w.SetEnabled(e)
+		(*w).SetEnabled(e)
 	}
 }
 
 func (wl *SDL_WidgetList) SetVisible(e bool) {
 	for _, w := range wl.list {
-		w.SetVisible(e)
+		(*w).SetVisible(e)
 	}
 }
 
 func (wl *SDL_WidgetList) Draw(renderer *sdl.Renderer) {
 	for _, w := range wl.list {
-		w.Draw(renderer, wl.font)
+		(*w).Draw(renderer, wl.font)
 	}
 }
 
@@ -467,13 +472,13 @@ func (wl *SDL_WidgetList) GetTextureCache() *SDL_TextureCache {
 
 func (wl *SDL_WidgetList) Scale(s float32) {
 	for _, w := range wl.list {
-		w.Scale(s)
+		(*w).Scale(s)
 	}
 }
 
 func (wl *SDL_WidgetList) Destroy() {
 	for _, w := range wl.list {
-		w.Destroy()
+		(*w).Destroy()
 	}
 }
 

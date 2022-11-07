@@ -202,18 +202,11 @@ func run() int {
 
 	labelGen := NewSDLLabel(0, 0, 290, btnHeight, LABEL_GEN, "Gen:0", ALIGN_LEFT, btnBg, btnFg)
 	labelSpeed := NewSDLLabel(0, 0, 270, btnHeight, LABEL_SPEED, "Delay:0ms", ALIGN_LEFT, btnBg, btnFg)
-	pathEntry1 := NewSDLEntry(0, 0, 300, btnHeight, PATH_ENTRY1, "The Quick Brown Fox", btnBg, btnFg, func(old, new string, t TEXT_CHANGE_TYPE) string {
+	pathEntry1 := NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY1, rle.Filename(), btnBg, btnFg, func(old, new string, t TEXT_CHANGE_TYPE) (string, error) {
 		fmt.Printf("OnChange old:'%s' new:'%s', type:%d\n", old, new, t)
-		if t == TEXT_CHANGE_FENISH {
-			fmt.Println(new)
-		} else {
-			if new == "" {
-				return old
-			}
-		}
-		return new
+		_, err := os.Stat(new)
+		return new, err
 	})
-	pathEntry2 := NewSDLEntry(0, 0, 300, btnHeight, PATH_ENTRY2, "The rain", btnBg, btnFg, nil)
 
 	btnStep := NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
 		lifeGen.SetRunFor(1, nil)
@@ -269,7 +262,6 @@ func run() int {
 	buttonsPaused.Add(btnFastest)
 	buttonsPaused.Add(labelSpeed)
 	buttonsPaused.Add(pathEntry1)
-	buttonsPaused.Add(pathEntry2)
 
 	arrows.Add(arrowR)
 	arrows.Add(arrowD)
@@ -402,15 +394,20 @@ func average(lg *go_life.LifeGen) (int32, int32) {
 func updateButtons(renderer *sdl.Renderer, wg *SDL_WidgetGroup) {
 	wl := wg.AllWidgets()
 	for _, w := range wl {
-		switch w.GetId() {
+		ww := *w
+		switch (*w).GetId() {
 		case BUTTON_FASTEST, BUTTON_FASTER:
-			w.SetEnabled(loopDelay > MIN_LOOP_DELAY)
+			ww.SetEnabled(loopDelay > MIN_LOOP_DELAY)
 		case BUTTON_SLOWER:
-			w.SetEnabled(loopDelay < MAX_LOOP_DELAY)
+			ww.SetEnabled(loopDelay < MAX_LOOP_DELAY)
 		case BUTTON_STEP:
-			w.SetVisible(lifeGen.GetRunFor() < 2)
+			ww.SetVisible(lifeGen.GetRunFor() < 2)
 		case LABEL_SPEED:
-			w.(*SDL_Label).SetText(fmt.Sprintf("Speed:%d", (MAX_LOOP_DELAY/50)-(loopDelay/50)))
+			ww.(*SDL_Label).SetText(fmt.Sprintf("Speed:%d", (MAX_LOOP_DELAY/50)-(loopDelay/50)))
+		case PATH_ENTRY1:
+			x, _ := ww.GetPosition()
+			ww.SetSize(renderer.GetViewport().W-x-300, -1)
+
 		}
 	}
 	var x, y int32 = 0, 0
@@ -422,8 +419,7 @@ func updateButtons(renderer *sdl.Renderer, wg *SDL_WidgetGroup) {
 		case LIST_TOP_LEFT:
 			x, y = l.ArrangeLR(btnGap, btnMarginTop, btnGap)
 		case LIST_TOP_RIGHT:
-			r := renderer.GetViewport()
-			l.ArrangeRL(r.W-btnGap, btnMarginTop, btnGap)
+			l.ArrangeRL(renderer.GetViewport().W-btnGap, btnMarginTop, btnGap)
 		case LIST_PAUSED:
 			x, y = l.ArrangeLR(x, y, btnGap)
 		}
