@@ -80,7 +80,7 @@ func (s *SDL_Shape) Add(x, y int32) {
 	s.validRect = nil
 }
 
-func (b *SDL_Shape) Click(x, y int32) bool {
+func (b *SDL_Shape) Click(md *SDL_MouseData) bool {
 	if b.IsEnabled() && b.onClick != nil {
 		if b.deBounce > 0 {
 			b.notPressed = false
@@ -89,7 +89,7 @@ func (b *SDL_Shape) Click(x, y int32) bool {
 				b.notPressed = true
 			}()
 		}
-		return b.onClick(b, x, y)
+		return b.onClick(b, md.x, md.y)
 	}
 	return false
 }
@@ -226,7 +226,7 @@ func (b *SDL_Label) GetText() string {
 	return b.text
 }
 
-func (b *SDL_Label) Click(x, y int32) bool {
+func (b *SDL_Label) Click(md *SDL_MouseData) bool {
 	return false
 }
 
@@ -319,7 +319,7 @@ func (b *SDL_Button) GetTextureCache() *SDL_TextureCache {
 	return b.textureCache
 }
 
-func (b *SDL_Button) Click(x, y int32) bool {
+func (b *SDL_Button) Click(md *SDL_MouseData) bool {
 	if b.IsEnabled() && b.onClick != nil {
 		if b.deBounce > 0 {
 			b.notPressed = false
@@ -328,7 +328,7 @@ func (b *SDL_Button) Click(x, y int32) bool {
 				b.notPressed = true
 			}()
 		}
-		return b.onClick(b, x, y)
+		return b.onClick(b, md.x, md.y)
 	}
 	return false
 }
@@ -426,7 +426,7 @@ func (b *SDL_Image) GetTextureCache() *SDL_TextureCache {
 	return b.textureCache
 }
 
-func (b *SDL_Image) Click(x, y int32) bool {
+func (b *SDL_Image) Click(md *SDL_MouseData) bool {
 	if b.IsEnabled() && b.onClick != nil {
 		if b.deBounce > 0 {
 			b.notPressed = false
@@ -435,7 +435,7 @@ func (b *SDL_Image) Click(x, y int32) bool {
 				b.notPressed = true
 			}()
 		}
-		return b.onClick(b, x, y)
+		return b.onClick(b, md.x, md.y)
 	}
 	return false
 }
@@ -505,14 +505,16 @@ func NewSDLSeparator(x, y, w, h, id int32, bgColour *sdl.Color) *SDL_Separator {
 	return but
 }
 
-func (b *SDL_Separator) Click(x, y int32) bool {
+func (b *SDL_Separator) Click(md *SDL_MouseData) bool {
 	return false
 }
 
 func (b *SDL_Separator) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
-	if b.bg != nil {
-		renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
-		renderer.FillRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
+	if b.IsEnabled() {
+		if b.bg != nil {
+			renderer.SetDrawColor(b.bg.R, b.bg.G, b.bg.B, b.bg.A)
+			renderer.FillRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
+		}
 	}
 	return nil
 }

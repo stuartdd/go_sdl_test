@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
@@ -14,20 +15,24 @@ import (
 **/
 type SDL_Entry struct {
 	SDL_WidgetBase
-	text         string
-	textLen      int
-	history      []string
-	cursor       int
-	cursorTimer  int
-	hasfocus     bool
-	ctrlKeyDown  bool
-	textureCache *SDL_TextureCache
-	invalid      bool
-	errorState   error
-	leadin       int
-	leadout      int
-	indent       int32
-	onChange     func(string, string, TEXT_CHANGE_TYPE) (string, error)
+	text             string
+	textLen          int
+	history          []string
+	cursor           int
+	cursorTimer      int
+	hasfocus         bool
+	ctrlKeyDown      bool
+	textureCache     *SDL_TextureCache
+	cacheLock        sync.Mutex
+	invalid          bool
+	errorState       error
+	leadin           int
+	leadout          int
+	indent           int32
+	dragFrom, dragTo int32
+	dragging         bool
+	onChange         func(string, string, TEXT_CHANGE_TYPE) (string, error)
+	keyPressLock     sync.Mutex
 }
 
 var _ SDL_Widget = (*SDL_Entry)(nil)   // Ensure SDL_Button 'is a' SDL_Widget
@@ -50,7 +55,7 @@ func (b *SDL_Entry) GetTextureCache() *SDL_TextureCache {
 func (b *SDL_Entry) SetForeground(c *sdl.Color) {
 	if b.fg != c {
 		b.fg = c
-		b.invalidate()
+		b.invalid = true
 	}
 }
 
@@ -69,10 +74,16 @@ func (b *SDL_Entry) pushHistory(val string) {
 
 func (b *SDL_Entry) SetText(text string) {
 	if b.text != text {
+		b.keyPressLock.Lock()
+		defer b.keyPressLock.Unlock()
 		b.text = text
 		b.textLen = len(b.text)
-		b.invalidate()
+		b.invalid = true
 	}
+}
+
+func (b *SDL_Entry) SupportsDragging() bool {
+	return true
 }
 
 func (b *SDL_Entry) SetFocus(focus bool) {
@@ -81,6 +92,7 @@ func (b *SDL_Entry) SetFocus(focus bool) {
 	} else {
 		b.hasfocus = false
 	}
+	b.invalid = true
 }
 
 func (b *SDL_Entry) HasFocus() bool {
@@ -93,6 +105,8 @@ func (b *SDL_Entry) HasFocus() bool {
 
 func (b *SDL_Entry) KeyPress(c int, ctrl bool, down bool) bool {
 	if b.IsEnabled() && b.HasFocus() {
+		b.keyPressLock.Lock()
+		defer b.keyPressLock.Unlock()
 		var err error
 		oldValue := b.text
 		newValue := b.text
@@ -181,7 +195,7 @@ func (b *SDL_Entry) KeyPress(c int, ctrl bool, down bool) bool {
 			case TEXT_CHANGE_BS:
 				b.MoveCursor(-1)
 			}
-			b.invalidate()
+			b.invalid = true
 			return true
 		}
 	}
@@ -206,8 +220,8 @@ func (b *SDL_Entry) MoveCursor(i int) {
 
 func (b *SDL_Entry) SetEnabled(e bool) {
 	if b.IsEnabled() != e {
-		b.invalidate()
 		b.SDL_WidgetBase.SetEnabled(e)
+		b.invalid = true
 	}
 }
 
@@ -215,13 +229,35 @@ func (b *SDL_Entry) GetText() string {
 	return b.text
 }
 
-func (b *SDL_Entry) Click(x, y int32) bool {
+func (b *SDL_Entry) Click(md *SDL_MouseData) bool {
 	if b.IsEnabled() {
+		b.keyPressLock.Lock()
+		defer b.keyPressLock.Unlock()
+
+		if md.IsDragging() {
+			if !b.dragging {
+				b.dragFrom = md.draggingToX
+				b.dragTo = md.draggingToX
+				b.dragging = true
+			} else {
+				b.dragTo = md.draggingToX
+			}
+			return true
+		} else {
+			b.dragFrom = 0
+			b.dragTo = 0
+			b.dragging = false
+		}
+
+		if md.IsDragged() {
+			return true
+		}
+
 		list := b.getTextureListFromCache()
 		cur := b.x + b.indent
 		for pos := b.leadin; pos < b.leadout; pos++ {
 			ec := list[pos]
-			if cur > x {
+			if cur > md.x {
 				b.SetCursor(pos)
 				return true
 			}
@@ -277,6 +313,9 @@ func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 			b.leadin = b.cursor - cc
 			b.leadout = b.leadin + cc
 		}
+		if b.leadout > b.textLen {
+			b.leadout = b.textLen
+		}
 
 		//*********************************************************
 		if b.bg != nil {
@@ -287,6 +326,15 @@ func (b *SDL_Entry) Draw(renderer *sdl.Renderer, font *ttf.Font) error {
 			}
 			renderer.FillRect(&sdl.Rect{X: b.x, Y: b.y, W: b.w, H: b.h})
 		}
+		if b.dragging && b.hasfocus {
+			renderer.SetDrawColor(100, 100, 0, b.bg.A)
+			if b.dragFrom > b.dragTo {
+				renderer.FillRect(&sdl.Rect{X: b.dragTo, Y: b.y + 1, W: b.dragFrom - b.dragTo, H: b.h - 2})
+			} else {
+				renderer.FillRect(&sdl.Rect{X: b.dragFrom, Y: b.y + 1, W: b.dragTo - b.dragFrom, H: b.h - 2})
+			}
+		}
+
 		tx = b.x + int32(b.indent)
 		th := float32(b.h) - float32(b.h)/4
 		ty := (float32(b.h) - th) / 2
@@ -327,6 +375,11 @@ func (b *SDL_Entry) Destroy() {
 }
 
 func (b *SDL_Entry) updateTextureCache(renderer *sdl.Renderer, font *ttf.Font, colour *sdl.Color, text string) error {
+	b.cacheLock.Lock()
+	defer func() {
+		b.invalid = false
+		b.cacheLock.Unlock()
+	}()
 	for _, c := range text {
 		key := string(c) + "-cHaR"
 		ok := b.textureCache.Peek(key)
@@ -342,17 +395,12 @@ func (b *SDL_Entry) updateTextureCache(renderer *sdl.Renderer, font *ttf.Font, c
 }
 
 func (b *SDL_Entry) getTextureListFromCache() []*SDL_TextureCacheEntry {
+	b.cacheLock.Lock()
+	defer b.cacheLock.Unlock()
 	list := make([]*SDL_TextureCacheEntry, len(b.text))
 	for i, c := range b.text {
 		ec, _ := b.textureCache.Get(string(c) + "-cHaR")
 		list[i] = ec
 	}
 	return list
-}
-
-func (b *SDL_Entry) invalidate() {
-	go func() {
-		sdl.Delay(100)
-		b.invalid = true
-	}()
 }

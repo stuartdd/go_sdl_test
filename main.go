@@ -22,6 +22,7 @@ const (
 	BUTTON_NUM
 	BUTTON_ZOOM_IN
 	BUTTON_ZOOM_OUT
+	BUTTON_LOAD_FILE
 	LIST_TOP_LEFT
 	LIST_PAUSED
 	LIST_ARROWS
@@ -45,27 +46,27 @@ var (
 	winTitle            string = "Go-SDL2 Render"
 	winWidth, winHeight int32  = 900, 900
 	displayMode         sdl.DisplayMode
-	fontSize            int    = 50
-	btnBg                      = &sdl.Color{R: 0, G: 56, B: 0, A: 128}
-	btnFg                      = &sdl.Color{R: 0, G: 255, B: 0, A: 255}
-	btnHeight           int32  = 70
-	btnMarginTop        int32  = 10
-	btnWidth            int32  = 150
-	btnGap              int32  = 10
-	btnTopMarginHeight  int32  = btnHeight + (btnMarginTop * 2)
-	mouseX              int32  = 0
-	mouseY              int32  = 0
-	mouseOn                    = false
-	loopDelay           uint32 = 0
-	lifeGen             *go_life.LifeGen
-	cellSize            int32 = 3
-	gridSize            int32 = 5
-	cellOffsetX         int32 = 0
-	cellOffsetY         int32 = 0
+	fontSize            int            = 50
+	btnBg                              = &sdl.Color{R: 0, G: 56, B: 0, A: 128}
+	btnFg                              = &sdl.Color{R: 0, G: 255, B: 0, A: 255}
+	mouseData           *SDL_MouseData = &SDL_MouseData{}
+	btnHeight           int32          = 70
+	btnMarginTop        int32          = 10
+	btnWidth            int32          = 150
+	btnGap              int32          = 10
+	btnTopMarginHeight  int32          = btnHeight + (btnMarginTop * 2)
+	mouseOn                            = false
+	loopDelay           uint32         = 0
+	cellSize            int32          = 3
+	gridSize            int32          = 5
+	cellOffsetX         int32          = 0
+	cellOffsetY         int32          = 0
 	cellX               int32
 	cellY               int32
 	arrowPosX           int32 = 245
 	arrowPosY           int32 = 245
+	lifeGen             *go_life.LifeGen
+	rleFile             *go_life.RLE
 )
 
 func run() int {
@@ -110,14 +111,10 @@ func run() int {
 
 	running := true
 
-	rle, err := go_life.NewRleFile("testdata/1234_synth.rle")
+	err = loadRleFile("testdata/1234_synth.rle")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load RLE file: %s\n", err)
-		return 1
+		fmt.Printf("Unable to load file %e", err)
 	}
-
-	lifeGen = go_life.NewLifeGen(func(lg *go_life.LifeGen) {}, go_life.RUN_FOR_EVER)
-	lifeGen.AddCellsAtOffset(0, 0, go_life.COLOUR_MODE_MASK, rle.Coords())
 	viewPort := renderer.GetViewport()
 	cellOffsetX, cellOffsetY = centerOnXY(viewPort.W/2, viewPort.H/2, lifeGen)
 
@@ -137,12 +134,13 @@ func run() int {
 
 	// Load image resources
 	err = widgetGroup.LoadTexturesFromFileMap(renderer, resources, map[string]string{
-		"lem":     "lem.png",
-		"slower":  "slower.png",
-		"faster":  "faster.png",
-		"fastest": "fastest.png",
-		"zoomin":  "zoom-in.png",
-		"zoomout": "zoom-out.png",
+		"lem":      "lem.png",
+		"slower":   "slower.png",
+		"faster":   "faster.png",
+		"fastest":  "fastest.png",
+		"zoomin":   "zoom-in.png",
+		"zoomout":  "zoom-out.png",
+		"fileload": "file-load.png",
 	})
 
 	if err != nil {
@@ -202,10 +200,19 @@ func run() int {
 
 	labelGen := NewSDLLabel(0, 0, 290, btnHeight, LABEL_GEN, "Gen:0", ALIGN_LEFT, btnBg, btnFg)
 	labelSpeed := NewSDLLabel(0, 0, 270, btnHeight, LABEL_SPEED, "Delay:0ms", ALIGN_LEFT, btnBg, btnFg)
-	pathEntry1 := NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY1, rle.Filename(), btnBg, btnFg, func(old, new string, t TEXT_CHANGE_TYPE) (string, error) {
+
+	var loadFile *SDL_Image
+	pathEntry1 := NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY1, rleFile.Filename(), btnBg, btnFg, func(old, new string, t TEXT_CHANGE_TYPE) (string, error) {
 		fmt.Printf("OnChange old:'%s' new:'%s', type:%d\n", old, new, t)
 		_, err := os.Stat(new)
+		loadFile.SetEnabled(err == nil)
+		updateButtons(renderer, widgetGroup)
 		return new, err
+	})
+
+	loadFile = NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_LOAD_FILE, "fileload", 0, 1, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+		loadRleFile(pathEntry1.GetText())
+		return true
 	})
 
 	btnStep := NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
@@ -261,6 +268,8 @@ func run() int {
 	buttonsPaused.Add(btnFaster)
 	buttonsPaused.Add(btnFastest)
 	buttonsPaused.Add(labelSpeed)
+	buttonsPaused.Add(NewSDLSeparator(0, 0, 10, btnHeight, 999, widgetColourDim(btnBg, false, 2)))
+	buttonsPaused.Add(loadFile)
 	buttonsPaused.Add(pathEntry1)
 
 	arrows.Add(arrowR)
@@ -312,18 +321,41 @@ func run() int {
 					widgetGroup.KeyPress(int(ks), true, false)
 				}
 			case *sdl.MouseMotionEvent:
-				mouseX = t.X
-				mouseY = t.Y
+				w := widgetGroup.Inside(t.X, t.Y)
+				if w != nil && w.GetWidgetId() == mouseData.GetWidgetId() {
+					if t.State == sdl.PRESSED {
+						mouseData.SetDragging(true)
+						mouseData.SetXY(t.X, t.Y)
+						w.Click(mouseData)
+					}
+				} else {
+					mouseData.SetDragging(false)
+					mouseData.SetXY(t.X, t.Y)
+				}
 			case *sdl.MouseButtonEvent:
-				if t.State == sdl.PRESSED {
-					x := t.X
-					y := t.Y
-					w := widgetGroup.Inside(x, y)
-					if w != nil {
-						widgetGroup.SetFocus(w.GetId(), true)
-						go w.Click(x, y)
+				x := t.X
+				y := t.Y
+				w := widgetGroup.Inside(x, y)
+				if w != nil {
+					if t.State == sdl.PRESSED {
+						widgetId := w.GetWidgetId()
+						mouseData.SetXY(x, y)
+						mouseData.SetButtons(t.Button)
+						mouseData.SetWidgetId(widgetId)
+						widgetGroup.SetFocus(widgetId)
+						w.Click(mouseData)
 					} else {
+						if mouseData.IsDragging() {
+							mouseData.SetDragged(true)
+							w.Click(mouseData)
+							mouseData.SetDragged(false)
+						}
+					}
+				} else {
+					if widgetGroup.GetFocused() == nil {
 						cellOffsetX, cellOffsetY = centerOnXY(x, y, lifeGen)
+					} else {
+						widgetGroup.ClearFocus()
 					}
 				}
 			case *sdl.MouseWheelEvent:
@@ -350,7 +382,7 @@ func run() int {
 		widgetGroup.Draw(renderer)
 		if mouseOn {
 			renderer.SetDrawColor(0, 0, 255, 255)
-			renderer.DrawRect(&sdl.Rect{X: mouseX - (30 / 2), Y: mouseY - (30 / 2), W: 30, H: 30})
+			renderer.DrawRect(&sdl.Rect{X: mouseData.GetX() - (30 / 2), Y: mouseData.GetY() - (30 / 2), W: 30, H: 30})
 		}
 		renderer.Present()
 		sdl.Delay(20)
@@ -395,7 +427,7 @@ func updateButtons(renderer *sdl.Renderer, wg *SDL_WidgetGroup) {
 	wl := wg.AllWidgets()
 	for _, w := range wl {
 		ww := *w
-		switch (*w).GetId() {
+		switch (*w).GetWidgetId() {
 		case BUTTON_FASTEST, BUTTON_FASTER:
 			ww.SetEnabled(loopDelay > MIN_LOOP_DELAY)
 		case BUTTON_SLOWER:
@@ -436,4 +468,15 @@ func zoomGrid(y int32) {
 		cellSize = 1
 	}
 	fmt.Printf("Size = %d Scale = %d\n", cellSize, gridSize)
+}
+
+func loadRleFile(filename string) error {
+	var err error
+	rleFile, err = go_life.NewRleFile(filename)
+	if err != nil {
+		return err
+	}
+	lifeGen = go_life.NewLifeGen(func(lg *go_life.LifeGen) {}, go_life.RUN_FOR_EVER)
+	lifeGen.AddCellsAtOffset(0, 0, go_life.COLOUR_MODE_MASK, rleFile.Coords())
+	return nil
 }

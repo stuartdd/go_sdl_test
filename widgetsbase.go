@@ -40,11 +40,11 @@ var TEXTURE_CACHE_TEXT_PREF = "TxCaPr987"
 type SDL_Widget interface {
 	Draw(*sdl.Renderer, *ttf.Font) error
 	Scale(float32)
-	Click(int32, int32) bool
+	Click(*SDL_MouseData) bool
 	Inside(int32, int32) bool      // Base
 	GetRect() *sdl.Rect            // Base
-	SetId(int32)                   // Base
-	GetId() int32                  // Base
+	SetWidgetId(int32)             // Base
+	GetWidgetId() int32            // Base
 	SetVisible(bool)               // Base
 	IsVisible() bool               // Base
 	SetEnabled(bool)               // Base
@@ -62,6 +62,7 @@ type SDL_CanFocus interface {
 	SetFocus(focus bool)
 	HasFocus() bool
 	KeyPress(int, bool, bool) bool
+	SupportsDragging() bool
 }
 
 type SDL_TextWidget interface {
@@ -69,7 +70,7 @@ type SDL_TextWidget interface {
 	GetTextureCache() *SDL_TextureCache
 	SetText(text string)
 	GetText() string
-	GetId() int32
+	GetWidgetId() int32
 	IsEnabled() bool
 	GetForeground() *sdl.Color
 }
@@ -86,9 +87,18 @@ type SDL_TextureCacheWidget interface {
 	GetTextureCache() *SDL_TextureCache
 }
 
+type SDL_MouseData struct {
+	x, y, draggingToX, draggingToY int32
+	button                         uint8
+	down                           bool
+	dragged                        bool
+	dragging                       bool
+	widgetId                       int32
+}
+
 type SDL_WidgetBase struct {
 	x, y, w, h int32
-	id         int32
+	widgetId   int32
 	visible    bool
 	_enabled   bool
 	notPressed bool
@@ -100,8 +110,16 @@ type SDL_WidgetBase struct {
 /****************************************************************************************
 * Common (base) functions for ALL SDL_Widget instances
 **/
-func initBase(x, y, w, h, id int32, deBounce int, bgColour, fgColour *sdl.Color) SDL_WidgetBase {
-	return SDL_WidgetBase{x: x, y: y, w: w, h: h, id: id, _enabled: true, visible: true, notPressed: true, deBounce: deBounce, bg: bgColour, fg: fgColour}
+func initBase(x, y, w, h, widgetId int32, deBounce int, bgColour, fgColour *sdl.Color) SDL_WidgetBase {
+	return SDL_WidgetBase{x: x, y: y, w: w, h: h, widgetId: widgetId, _enabled: true, visible: true, notPressed: true, deBounce: deBounce, bg: bgColour, fg: fgColour}
+}
+
+func (b *SDL_WidgetBase) GetWidgetId() int32 {
+	return b.widgetId
+}
+
+func (b *SDL_WidgetBase) SetWidgetId(widgetId int32) {
+	b.widgetId = widgetId
 }
 
 func (b *SDL_WidgetBase) SetPosition(x, y int32) bool {
@@ -146,19 +164,11 @@ func (b *SDL_WidgetBase) GetSize() (int32, int32) {
 	return b.w, b.h
 }
 
-func (b *SDL_WidgetBase) SetId(id int32) {
-	b.id = id
-}
-
 func (b *SDL_WidgetBase) Scale(s float32) {
 	b.w = int32(float32(b.w) * s)
 	b.h = int32(float32(b.h) * s)
 	b.x = int32(float32(b.x) * s)
 	b.y = int32(float32(b.y) * s)
-}
-
-func (b *SDL_WidgetBase) GetId() int32 {
-	return b.id
 }
 
 func (b *SDL_WidgetBase) SetVisible(v bool) {
@@ -227,9 +237,14 @@ func (wg *SDL_WidgetGroup) AllWidgets() []*SDL_Widget {
 	return l
 }
 
-func (wg *SDL_WidgetGroup) SetFocus(id int32, focus bool) {
+func (wg *SDL_WidgetGroup) SetFocus(id int32) {
 	for _, wList := range wg.wigetLists {
-		wList.SetFocus(id, focus)
+		wList.SetFocus(id)
+	}
+}
+func (wg *SDL_WidgetGroup) ClearFocus() {
+	for _, wList := range wg.wigetLists {
+		wList.ClearFocus()
 	}
 }
 
@@ -369,11 +384,20 @@ func (wl *SDL_WidgetList) ListWidgets() []*SDL_Widget {
 	return wl.list
 }
 
-func (wl *SDL_WidgetList) SetFocus(id int32, focus bool) {
+func (wl *SDL_WidgetList) SetFocus(id int32) {
 	for _, w := range wl.list {
 		f, ok := (*w).(SDL_CanFocus)
 		if ok {
-			f.SetFocus((*w).GetId() == id)
+			f.SetFocus((*w).GetWidgetId() == id)
+		}
+	}
+}
+
+func (wl *SDL_WidgetList) ClearFocus() {
+	for _, w := range wl.list {
+		f, ok := (*w).(SDL_CanFocus)
+		if ok {
+			f.SetFocus(false)
 		}
 	}
 }
@@ -649,6 +673,81 @@ func (tc *SDL_TextureCache) GetTextureForName(name string) (*sdl.Texture, int32,
 		return nil, 0, 0, fmt.Errorf("texture cache does not contain %s", name)
 	}
 	return tce.Texture, tce.W, tce.H, nil
+}
+
+func (md *SDL_MouseData) String() string {
+	return fmt.Sprintf("x:%d y:%d Dx:%d Dy:%d ID:%d Btn:%d Down:%t Dragged:%t Dragging:%t", md.GetX(), md.GetY(), md.draggingToX, md.draggingToY, md.widgetId, md.button, md.IsDown(), md.IsDragged(), md.IsDragging())
+}
+
+func (md *SDL_MouseData) IsDown() bool {
+	return md.down
+}
+
+func (md *SDL_MouseData) IsDragged() bool {
+	return md.dragged
+}
+
+func (md *SDL_MouseData) IsDragging() bool {
+	return md.dragging
+}
+
+func (md *SDL_MouseData) SetDragged(d bool) {
+	md.dragging = false
+	md.dragged = d
+}
+
+func (md *SDL_MouseData) SetDragging(d bool) {
+	if d {
+		md.dragging = true
+	} else {
+		md.draggingToX = 0
+		md.draggingToY = 0
+		md.dragging = false
+		md.widgetId = 0
+	}
+	md.dragged = false
+}
+
+func (md *SDL_MouseData) GetWidgetId() int32 {
+	return md.widgetId
+}
+
+func (md *SDL_MouseData) SetWidgetId(id int32) {
+	if md.widgetId != id {
+		md.draggingToX = 0
+		md.draggingToY = 0
+		md.dragging = false
+		md.dragged = false
+	}
+	md.widgetId = id
+}
+
+func (md *SDL_MouseData) GetY() int32 {
+	return md.y
+}
+
+func (md *SDL_MouseData) GetX() int32 {
+	return md.x
+}
+
+func (md *SDL_MouseData) GetButtons() uint8 {
+	return md.button
+}
+
+func (md *SDL_MouseData) SetButtons(b uint8) {
+	md.button = b
+}
+
+func (md *SDL_MouseData) SetXY(x, y int32) {
+	if md.dragging {
+		md.draggingToX = x
+		md.draggingToY = y
+	} else {
+		md.x = x
+		md.y = y
+	}
+	md.down = true
+	md.dragged = false
 }
 
 /****************************************************************************************
