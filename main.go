@@ -29,6 +29,7 @@ const (
 	LIST_TOP_RIGHT
 	LABEL_GEN
 	LABEL_SPEED
+	LABEL_RELOAD
 	PATH_ENTRY1
 	PATH_ENTRY2
 	ARROW_UP
@@ -118,19 +119,13 @@ func run() int {
 	viewPort := renderer.GetViewport()
 	cellOffsetX, cellOffsetY = centerOnXY(viewPort.W/2, viewPort.H/2, lifeGen)
 
-	widgetGroup := NewWidgetGroup()
+	widgetGroup := NewWidgetGroup(font)
 	defer widgetGroup.Destroy()
 
-	buttonsTL := NewSDLWidgetList(font, LIST_TOP_LEFT)
-	buttonsPaused := NewSDLWidgetList(font, LIST_PAUSED)
-	arrows := NewSDLWidgetList(nil, LIST_ARROWS)
-	buttonsTR := NewSDLWidgetList(nil, LIST_TOP_RIGHT)
-	additional := NewSDLWidgetList(nil, 999)
-	widgetGroup.Add(buttonsTL)
-	widgetGroup.Add(buttonsTR)
-	widgetGroup.Add(buttonsPaused)
-	widgetGroup.Add(arrows)
-	widgetGroup.Add(additional)
+	arrows := widgetGroup.NewWidgetSubGroup(nil, LIST_ARROWS)
+	buttonsTL := widgetGroup.NewWidgetSubGroup(nil, LIST_TOP_LEFT)
+	buttonsPaused := widgetGroup.NewWidgetSubGroup(nil, LIST_PAUSED)
+	buttonsTR := widgetGroup.NewWidgetSubGroup(nil, LIST_TOP_RIGHT)
 
 	// Load image resources
 	err = widgetGroup.LoadTexturesFromFileMap(renderer, resources, map[string]string{
@@ -142,7 +137,6 @@ func run() int {
 		"zoomout":  "zoom-out.png",
 		"fileload": "file-load.png",
 	})
-
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load file textures: %s\n", err)
 		return 1
@@ -151,7 +145,6 @@ func run() int {
 	err = widgetGroup.LoadTexturesFromStringMap(renderer, map[string]string{
 		"numbers": "0123456789",
 	}, font, btnFg)
-
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load text textures: %s\n", err)
 		return 1
@@ -269,6 +262,7 @@ func run() int {
 	buttonsPaused.Add(btnFastest)
 	buttonsPaused.Add(labelSpeed)
 	buttonsPaused.Add(NewSDLSeparator(0, 0, 10, btnHeight, 999, widgetColourDim(btnBg, false, 2)))
+	buttonsPaused.Add(NewSDLLabel(0, 0, 250, btnHeight, LABEL_RELOAD, "Reload", ALIGN_LEFT, btnBg, nil))
 	buttonsPaused.Add(loadFile)
 	buttonsPaused.Add(pathEntry1)
 
@@ -331,6 +325,7 @@ func run() int {
 				} else {
 					mouseData.SetDragging(false)
 					mouseData.SetXY(t.X, t.Y)
+					widgetGroup.ClearSelection()
 				}
 			case *sdl.MouseButtonEvent:
 				x := t.X
@@ -442,18 +437,18 @@ func updateButtons(renderer *sdl.Renderer, wg *SDL_WidgetGroup) {
 
 		}
 	}
+
 	var x, y int32 = 0, 0
-	ll := wg.AllLists()
+	ll := wg.AllSubGroups()
 	for _, l := range ll {
 		switch l.GetId() {
 		case LIST_ARROWS:
 			l.SetEnable(lifeGen.GetRunFor() < 2)
 		case LIST_TOP_LEFT:
 			x, y = l.ArrangeLR(btnGap, btnMarginTop, btnGap)
+			wg.GetWidgetSubGroup(LIST_PAUSED).ArrangeLR(x, y, btnGap)
 		case LIST_TOP_RIGHT:
 			l.ArrangeRL(renderer.GetViewport().W-btnGap, btnMarginTop, btnGap)
-		case LIST_PAUSED:
-			x, y = l.ArrangeLR(x, y, btnGap)
 		}
 	}
 }

@@ -82,8 +82,10 @@ func (b *SDL_Entry) SetText(text string) {
 	}
 }
 
-func (b *SDL_Entry) SupportsDragging() bool {
-	return true
+func (b *SDL_Entry) ClearSelection() {
+	b.dragging = false
+	b.dragTo = 0
+	b.dragFrom = 0
 }
 
 func (b *SDL_Entry) SetFocus(focus bool) {

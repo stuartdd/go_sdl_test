@@ -50,19 +50,19 @@ type SDL_Widget interface {
 	SetEnabled(bool)               // Base
 	IsEnabled() bool               // Base
 	SetPosition(int32, int32) bool // Base
-	SetSize(int32, int32) bool     // Base
 	GetPosition() (int32, int32)   // Base
+	SetSize(int32, int32) bool     // Base
 	GetSize() (int32, int32)       // Base
-	Destroy()                      // Base
 	GetForeground() *sdl.Color     // Base
 	GetBackground() *sdl.Color     // Base
+	Destroy()                      // Base
 }
 
 type SDL_CanFocus interface {
 	SetFocus(focus bool)
 	HasFocus() bool
 	KeyPress(int, bool, bool) bool
-	SupportsDragging() bool
+	ClearSelection()
 }
 
 type SDL_TextWidget interface {
@@ -214,19 +214,22 @@ func (b *SDL_WidgetBase) Inside(x, y int32) bool {
 * Container for SDL_Widgets. A list of lists
 **/
 type SDL_WidgetGroup struct {
-	wigetLists   []*SDL_WidgetList
+	wigetLists   []*SDL_WidgetSubGroup
 	font         *ttf.Font
 	textureCache *SDL_TextureCache
 }
 
-func NewWidgetGroup() *SDL_WidgetGroup {
-	return &SDL_WidgetGroup{wigetLists: make([]*SDL_WidgetList, 0), textureCache: NewTextureCache()}
+func NewWidgetGroup(font *ttf.Font) *SDL_WidgetGroup {
+	return &SDL_WidgetGroup{wigetLists: make([]*SDL_WidgetSubGroup, 0), textureCache: NewTextureCache(), font: font}
 }
 
-func (wg *SDL_WidgetGroup) Add(widgetList *SDL_WidgetList) {
-	wg.GetTextureCache().Merge(widgetList.GetTextureCache())
-	widgetList.SetTextureCache(wg.GetTextureCache())
-	wg.wigetLists = append(wg.wigetLists, widgetList)
+func (wg *SDL_WidgetGroup) NewWidgetSubGroup(font *ttf.Font, id int32) *SDL_WidgetSubGroup {
+	if font == nil {
+		font = wg.font
+	}
+	sg := &SDL_WidgetSubGroup{textureCache: wg.textureCache, list: make([]*SDL_Widget, 0), font: font, id: id}
+	wg.wigetLists = append(wg.wigetLists, sg)
+	return sg
 }
 
 func (wg *SDL_WidgetGroup) AllWidgets() []*SDL_Widget {
@@ -242,9 +245,16 @@ func (wg *SDL_WidgetGroup) SetFocus(id int32) {
 		wList.SetFocus(id)
 	}
 }
+
 func (wg *SDL_WidgetGroup) ClearFocus() {
 	for _, wList := range wg.wigetLists {
 		wList.ClearFocus()
+	}
+}
+
+func (wg *SDL_WidgetGroup) ClearSelection() {
+	for _, wList := range wg.wigetLists {
+		wList.ClearSelection()
 	}
 }
 
@@ -258,8 +268,27 @@ func (wg *SDL_WidgetGroup) GetFocused() SDL_CanFocus {
 	return nil
 }
 
-func (wg *SDL_WidgetGroup) AllLists() []*SDL_WidgetList {
-	l := make([]*SDL_WidgetList, 0)
+func (wl *SDL_WidgetGroup) GetWidgetSubGroup(id int32) *SDL_WidgetSubGroup {
+	for _, w := range wl.wigetLists {
+		if (*w).GetId() == id {
+			return w
+		}
+	}
+	return nil
+}
+
+func (wl *SDL_WidgetGroup) GetWidget(id int) *SDL_Widget {
+	for _, w := range wl.wigetLists {
+		wi := w.GetWidget(id)
+		if wi != nil {
+			return wi
+		}
+	}
+	return nil
+}
+
+func (wg *SDL_WidgetGroup) AllSubGroups() []*SDL_WidgetSubGroup {
+	l := make([]*SDL_WidgetSubGroup, 0)
 	l = append(l, wg.wigetLists...)
 	return l
 }
@@ -334,36 +363,32 @@ func (wg *SDL_WidgetGroup) Inside(x, y int32) SDL_Widget {
 /****************************************************************************************
 * Container for SDL_Widget instances.
 **/
-type SDL_WidgetList struct {
+type SDL_WidgetSubGroup struct {
+	id           int32
 	list         []*SDL_Widget
 	font         *ttf.Font
 	textureCache *SDL_TextureCache
-	id           int32
 }
 
-func NewSDLWidgetList(font *ttf.Font, id int32) *SDL_WidgetList {
-	return &SDL_WidgetList{textureCache: nil, list: make([]*SDL_Widget, 0), font: font, id: id}
-}
-
-func (wl *SDL_WidgetList) GetId() int32 {
+func (wl *SDL_WidgetSubGroup) GetId() int32 {
 	return wl.id
 }
 
-func (wl *SDL_WidgetList) LoadTexturesFromFiles(renderer *sdl.Renderer, applicationDataPath string, fileMap map[string]string) error {
+func (wl *SDL_WidgetSubGroup) LoadTexturesFromFiles(renderer *sdl.Renderer, applicationDataPath string, fileMap map[string]string) error {
 	if wl.textureCache == nil {
 		wl.textureCache = NewTextureCache()
 	}
 	return wl.textureCache.LoadTexturesFromFileMap(renderer, applicationDataPath, fileMap)
 }
 
-func (wl *SDL_WidgetList) GetTextureForName(name string) (*sdl.Texture, int32, int32, error) {
+func (wl *SDL_WidgetSubGroup) GetTextureForName(name string) (*sdl.Texture, int32, int32, error) {
 	if wl.textureCache == nil {
 		return nil, 0, 0, fmt.Errorf("texture cache for SDL_WidgetList.GetTexture is nil")
 	}
 	return wl.textureCache.GetTextureForName(name)
 }
 
-func (wl *SDL_WidgetList) Add(widget SDL_Widget) {
+func (wl *SDL_WidgetSubGroup) Add(widget SDL_Widget) {
 	tw, ok := widget.(SDL_TextureCacheWidget)
 	if ok {
 		tw.SetTextureCache(wl.textureCache)
@@ -371,7 +396,7 @@ func (wl *SDL_WidgetList) Add(widget SDL_Widget) {
 	wl.list = append(wl.list, &widget)
 }
 
-func (wl *SDL_WidgetList) Inside(x, y int32) SDL_Widget {
+func (wl *SDL_WidgetSubGroup) Inside(x, y int32) SDL_Widget {
 	for _, w := range wl.list {
 		if (*w).Inside(x, y) {
 			return (*w)
@@ -380,11 +405,20 @@ func (wl *SDL_WidgetList) Inside(x, y int32) SDL_Widget {
 	return nil
 }
 
-func (wl *SDL_WidgetList) ListWidgets() []*SDL_Widget {
+func (wl *SDL_WidgetSubGroup) ListWidgets() []*SDL_Widget {
 	return wl.list
 }
 
-func (wl *SDL_WidgetList) SetFocus(id int32) {
+func (wl *SDL_WidgetSubGroup) GetWidget(id int) *SDL_Widget {
+	for _, w := range wl.list {
+		if int((*w).GetWidgetId()) == id {
+			return w
+		}
+	}
+	return nil
+}
+
+func (wl *SDL_WidgetSubGroup) SetFocus(id int32) {
 	for _, w := range wl.list {
 		f, ok := (*w).(SDL_CanFocus)
 		if ok {
@@ -393,7 +427,7 @@ func (wl *SDL_WidgetList) SetFocus(id int32) {
 	}
 }
 
-func (wl *SDL_WidgetList) ClearFocus() {
+func (wl *SDL_WidgetSubGroup) ClearFocus() {
 	for _, w := range wl.list {
 		f, ok := (*w).(SDL_CanFocus)
 		if ok {
@@ -402,7 +436,15 @@ func (wl *SDL_WidgetList) ClearFocus() {
 	}
 }
 
-func (wl *SDL_WidgetList) GetFocused() SDL_CanFocus {
+func (wl *SDL_WidgetSubGroup) ClearSelection() {
+	for _, w := range wl.list {
+		f, ok := (*w).(SDL_CanFocus)
+		if ok {
+			f.ClearSelection()
+		}
+	}
+}
+func (wl *SDL_WidgetSubGroup) GetFocused() SDL_CanFocus {
 	for _, w := range wl.list {
 		f, ok := (*w).(SDL_CanFocus)
 		if ok {
@@ -414,7 +456,7 @@ func (wl *SDL_WidgetList) GetFocused() SDL_CanFocus {
 	return nil
 }
 
-func (wl *SDL_WidgetList) KeyPress(c int, ctrl, down bool) bool {
+func (wl *SDL_WidgetSubGroup) KeyPress(c int, ctrl, down bool) bool {
 	for _, w := range wl.list {
 		f, ok := (*w).(SDL_CanFocus)
 		if ok {
@@ -428,7 +470,7 @@ func (wl *SDL_WidgetList) KeyPress(c int, ctrl, down bool) bool {
 	return false
 }
 
-func (wl *SDL_WidgetList) ArrangeLR(xx, yy, padding int32) (int32, int32) {
+func (wl *SDL_WidgetSubGroup) ArrangeLR(xx, yy, padding int32) (int32, int32) {
 	x := xx
 	y := yy
 	var width int32
@@ -443,7 +485,7 @@ func (wl *SDL_WidgetList) ArrangeLR(xx, yy, padding int32) (int32, int32) {
 	return x, y
 }
 
-func (wl *SDL_WidgetList) ArrangeRL(xx, yy, padding int32) (int32, int32) {
+func (wl *SDL_WidgetSubGroup) ArrangeRL(xx, yy, padding int32) (int32, int32) {
 	x := xx
 	y := yy
 	var width int32
@@ -457,50 +499,39 @@ func (wl *SDL_WidgetList) ArrangeRL(xx, yy, padding int32) (int32, int32) {
 	return x, y
 }
 
-func (wl *SDL_WidgetList) SetEnable(e bool) {
+func (wl *SDL_WidgetSubGroup) SetEnable(e bool) {
 	for _, w := range wl.list {
 		(*w).SetEnabled(e)
 	}
 }
 
-func (wl *SDL_WidgetList) SetVisible(e bool) {
+func (wl *SDL_WidgetSubGroup) SetVisible(e bool) {
 	for _, w := range wl.list {
 		(*w).SetVisible(e)
 	}
 }
 
-func (wl *SDL_WidgetList) Draw(renderer *sdl.Renderer) {
+func (wl *SDL_WidgetSubGroup) Draw(renderer *sdl.Renderer) {
 	for _, w := range wl.list {
 		(*w).Draw(renderer, wl.font)
 	}
 }
 
-func (wl *SDL_WidgetList) SetFont(font *ttf.Font) {
+func (wl *SDL_WidgetSubGroup) SetFont(font *ttf.Font) {
 	wl.font = font
 }
 
-func (wl *SDL_WidgetList) GetFont() *ttf.Font {
+func (wl *SDL_WidgetSubGroup) GetFont() *ttf.Font {
 	return wl.font
 }
 
-func (wl *SDL_WidgetList) SetTextureCache(textureCache *SDL_TextureCache) {
-	if wl.textureCache != nil {
-		wl.textureCache.Destroy()
-	}
-	wl.textureCache = textureCache
-}
-
-func (wl *SDL_WidgetList) GetTextureCache() *SDL_TextureCache {
-	return wl.textureCache
-}
-
-func (wl *SDL_WidgetList) Scale(s float32) {
+func (wl *SDL_WidgetSubGroup) Scale(s float32) {
 	for _, w := range wl.list {
 		(*w).Scale(s)
 	}
 }
 
-func (wl *SDL_WidgetList) Destroy() {
+func (wl *SDL_WidgetSubGroup) Destroy() {
 	for _, w := range wl.list {
 		(*w).Destroy()
 	}
@@ -619,15 +650,6 @@ func (tc *SDL_TextureCache) Remove(name string, tceIn *SDL_TextureCacheEntry) {
 		tc.out = tc.out + tce.Destroy()
 	}
 	tc._textureMap[name] = nil
-}
-
-func (tc *SDL_TextureCache) Merge(fromCache *SDL_TextureCache) {
-	if fromCache == nil {
-		return
-	}
-	for n, v := range fromCache._textureMap {
-		tc.Add(n, v)
-	}
 }
 
 func (tc *SDL_TextureCache) Destroy() {
