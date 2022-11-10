@@ -8,6 +8,7 @@ import (
 	"path"
 
 	go_life "github.com/stuartdd/go_life_engine"
+	widgets "github.com/stuartdd/go_sdl_widget"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 )
@@ -47,21 +48,21 @@ var (
 	winTitle            string = "Go-SDL2 Render"
 	winWidth, winHeight int32  = 900, 900
 	displayMode         sdl.DisplayMode
-	fontSize            int            = 50
-	btnBg                              = &sdl.Color{R: 0, G: 56, B: 0, A: 128}
-	btnFg                              = &sdl.Color{R: 0, G: 255, B: 0, A: 255}
-	mouseData           *SDL_MouseData = &SDL_MouseData{}
-	btnHeight           int32          = 70
-	btnMarginTop        int32          = 10
-	btnWidth            int32          = 150
-	btnGap              int32          = 10
-	btnTopMarginHeight  int32          = btnHeight + (btnMarginTop * 2)
-	mouseOn                            = false
-	loopDelay           uint32         = 0
-	cellSize            int32          = 3
-	gridSize            int32          = 5
-	cellOffsetX         int32          = 0
-	cellOffsetY         int32          = 0
+	fontSize            int                    = 50
+	btnBg                                      = &sdl.Color{R: 0, G: 56, B: 0, A: 128}
+	btnFg                                      = &sdl.Color{R: 0, G: 255, B: 0, A: 255}
+	mouseData           *widgets.SDL_MouseData = &widgets.SDL_MouseData{}
+	btnHeight           int32                  = 70
+	btnMarginTop        int32                  = 10
+	btnWidth            int32                  = 150
+	btnGap              int32                  = 10
+	btnTopMarginHeight  int32                  = btnHeight + (btnMarginTop * 2)
+	mouseOn                                    = false
+	loopDelay           uint32                 = 0
+	cellSize            int32                  = 3
+	gridSize            int32                  = 5
+	cellOffsetX         int32                  = 0
+	cellOffsetY         int32                  = 0
 	cellX               int32
 	cellY               int32
 	arrowPosX           int32 = 245
@@ -119,7 +120,7 @@ func run() int {
 	viewPort := renderer.GetViewport()
 	cellOffsetX, cellOffsetY = centerOnXY(viewPort.W/2, viewPort.H/2, lifeGen)
 
-	widgetGroup := NewWidgetGroup(font)
+	widgetGroup := widgets.NewWidgetGroup(font)
 	defer widgetGroup.Destroy()
 
 	arrows := widgetGroup.NewWidgetSubGroup(nil, LIST_ARROWS)
@@ -128,7 +129,7 @@ func run() int {
 	buttonsTR := widgetGroup.NewWidgetSubGroup(nil, LIST_TOP_RIGHT)
 
 	// Load image resources
-	err = widgetGroup.LoadTexturesFromFileMap(renderer, resources, map[string]string{
+	err = widgets.GetResourceInstance().AddTexturesFromFileMap(renderer, resources, map[string]string{
 		"lem":      "lem.png",
 		"slower":   "slower.png",
 		"faster":   "faster.png",
@@ -142,7 +143,7 @@ func run() int {
 		return 1
 	}
 
-	err = widgetGroup.LoadTexturesFromStringMap(renderer, map[string]string{
+	err = widgets.GetResourceInstance().AddTexturesFromStringMap(renderer, map[string]string{
 		"numbers": "0123456789",
 	}, font, btnFg)
 	if err != nil {
@@ -150,12 +151,12 @@ func run() int {
 		return 1
 	}
 
-	btnClose := NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_CLOSE, "Quit", btnBg, btnFg, 0, func(b SDL_Widget, i1, i2 int32) bool {
+	btnClose := widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_CLOSE, "Quit", btnBg, btnFg, widgets.WIDGET_STYLE_NONE, 0, func(b widgets.SDL_Widget, i1, i2 int32) bool {
 		running = false
 		return true
 	})
 
-	btnSlower := NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_SLOWER, "slower", 0, 1, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	btnSlower := widgets.NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_SLOWER, "slower", 0, 1, btnBg, btnFg, widgets.WIDGET_STYLE_NONE, 0, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		loopDelay = loopDelay + STEP_LOOP_DELAY
 		if loopDelay > MAX_LOOP_DELAY {
 			loopDelay = MAX_LOOP_DELAY
@@ -163,19 +164,19 @@ func run() int {
 		return true
 	})
 
-	btnFaster := NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_FASTER, "faster", 0, 1, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	btnFaster := widgets.NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_FASTER, "faster", 0, 1, btnBg, btnFg, widgets.WIDGET_STYLE_NONE, 0, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		if loopDelay >= STEP_LOOP_DELAY {
 			loopDelay = loopDelay - STEP_LOOP_DELAY
 		}
 		return true
 	})
 
-	btnFastest := NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_FASTEST, "fastest", 0, 1, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	btnFastest := widgets.NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_FASTEST, "fastest", 0, 1, btnBg, btnFg, widgets.WIDGET_STYLE_NONE, 0, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		loopDelay = MIN_LOOP_DELAY
 		return true
 	})
 
-	btnZoomIn := NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_ZOOM_IN, "zoomin", 0, 1, nil, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	btnZoomIn := widgets.NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_ZOOM_IN, "zoomin", 0, 1, nil, btnFg, widgets.WIDGET_STYLE_NONE, 0, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		widgetGroup.Scale(1.1)
 		_, h := btnClose.GetSize()
 		btnTopMarginHeight = h + +(btnMarginTop * 2)
@@ -183,7 +184,7 @@ func run() int {
 		return true
 	})
 
-	btnZoomOut := NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_ZOOM_IN, "zoomout", 0, 1, nil, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	btnZoomOut := widgets.NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_ZOOM_IN, "zoomout", 0, 1, nil, btnFg, widgets.WIDGET_STYLE_NONE, 0, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		widgetGroup.Scale(0.9)
 		_, h := btnClose.GetSize()
 		btnTopMarginHeight = h + +(btnMarginTop * 2)
@@ -191,11 +192,11 @@ func run() int {
 		return true
 	})
 
-	labelGen := NewSDLLabel(0, 0, 290, btnHeight, LABEL_GEN, "Gen:0", ALIGN_LEFT, btnBg, btnFg)
-	labelSpeed := NewSDLLabel(0, 0, 270, btnHeight, LABEL_SPEED, "Delay:0ms", ALIGN_LEFT, btnBg, btnFg)
+	labelGen := widgets.NewSDLLabel(0, 0, 290, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, btnBg, btnFg, widgets.WIDGET_STYLE_NONE)
+	labelSpeed := widgets.NewSDLLabel(0, 0, 270, btnHeight, LABEL_SPEED, "Delay:0ms", widgets.ALIGN_LEFT, btnBg, btnFg, widgets.WIDGET_STYLE_NONE)
 
-	var loadFile *SDL_Image
-	pathEntry1 := NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY1, rleFile.Filename(), btnBg, btnFg, func(old, new string, t TEXT_CHANGE_TYPE) (string, error) {
+	var loadFile *widgets.SDL_Image
+	pathEntry1 := widgets.NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY1, rleFile.Filename(), btnBg, btnFg, widgets.WIDGET_STYLE_NONE, func(old, new string, t widgets.TEXT_CHANGE_TYPE) (string, error) {
 		fmt.Printf("OnChange old:'%s' new:'%s', type:%d\n", old, new, t)
 		_, err := os.Stat(new)
 		loadFile.SetEnabled(err == nil)
@@ -203,18 +204,18 @@ func run() int {
 		return new, err
 	})
 
-	loadFile = NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_LOAD_FILE, "fileload", 0, 1, btnBg, btnFg, 0, func(s SDL_Widget, i1, i2 int32) bool {
+	loadFile = widgets.NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_LOAD_FILE, "fileload", 0, 1, btnBg, btnFg, widgets.WIDGET_STYLE_NONE, 0, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		loadRleFile(pathEntry1.GetText())
 		return true
 	})
 
-	btnStep := NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, 10, func(b SDL_Widget, i1, i2 int32) bool {
+	btnStep := widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_STEP, "Step", btnBg, btnFg, widgets.WIDGET_STYLE_NONE, 10, func(b widgets.SDL_Widget, i1, i2 int32) bool {
 		lifeGen.SetRunFor(1, nil)
 		return true
 	})
 
-	btnStop := NewSDLButton(0, 0, btnWidth+30, btnHeight, BUTTON_STOP_START, "Stop", btnBg, btnFg, 500, func(b SDL_Widget, i1, i2 int32) bool {
-		bb := b.(*SDL_Button)
+	btnStop := widgets.NewSDLButton(0, 0, btnWidth+30, btnHeight, BUTTON_STOP_START, "Stop", btnBg, btnFg, widgets.WIDGET_STYLE_NONE, 500, func(b widgets.SDL_Widget, i1, i2 int32) bool {
+		bb := b.(*widgets.SDL_Button)
 		if lifeGen.IsRunning() {
 			lifeGen.SetRunFor(0, nil)
 			bb.SetText("Start")
@@ -229,21 +230,21 @@ func run() int {
 		return true
 	})
 
-	arrowR := NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_RIGHT, btnBg, btnFg, func(s SDL_Widget, i1, i2 int32) bool {
+	arrowR := widgets.NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_RIGHT, btnBg, btnFg, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		cellOffsetX = cellOffsetX + 100
 		return true
 	})
-	arrowD := NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_DOWN, btnBg, btnFg, func(s SDL_Widget, i1, i2 int32) bool {
+	arrowD := widgets.NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_DOWN, btnBg, btnFg, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		cellOffsetY = cellOffsetY + 100
 		return true
 	})
 	arrowD.Rotate(90)
-	arrowL := NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_LEFT, btnBg, btnFg, func(s SDL_Widget, i1, i2 int32) bool {
+	arrowL := widgets.NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_LEFT, btnBg, btnFg, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		cellOffsetX = cellOffsetX - 100
 		return true
 	})
 	arrowL.Rotate(180)
-	arrowU := NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_UP, btnBg, btnFg, func(s SDL_Widget, i1, i2 int32) bool {
+	arrowU := widgets.NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_UP, btnBg, btnFg, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		cellOffsetY = cellOffsetY - 100
 		return true
 	})
@@ -252,7 +253,7 @@ func run() int {
 	buttonsTL.Add(btnClose)
 	buttonsTL.Add(btnStop)
 	buttonsTL.Add(labelGen)
-	buttonsTL.Add(NewSDLSeparator(0, 0, 10, btnHeight, 999, widgetColourDim(btnBg, false, 2)))
+	buttonsTL.Add(widgets.NewSDLSeparator(0, 0, 10, btnHeight, 999, widgets.WidgetColourDim(btnBg, false, 2), btnFg, widgets.WIDGET_STYLE_NONE))
 	buttonsTL.Add(btnStep)
 	buttonsTR.Add(btnZoomIn)
 	buttonsTR.Add(btnZoomOut)
@@ -261,8 +262,8 @@ func run() int {
 	buttonsPaused.Add(btnFaster)
 	buttonsPaused.Add(btnFastest)
 	buttonsPaused.Add(labelSpeed)
-	buttonsPaused.Add(NewSDLSeparator(0, 0, 10, btnHeight, 999, widgetColourDim(btnBg, false, 2)))
-	buttonsPaused.Add(NewSDLLabel(0, 0, 250, btnHeight, LABEL_RELOAD, "Reload", ALIGN_LEFT, btnBg, nil))
+	buttonsPaused.Add(widgets.NewSDLSeparator(0, 0, 10, btnHeight, 999, widgets.WidgetColourDim(btnBg, false, 2), btnFg, widgets.WIDGET_STYLE_NONE))
+	buttonsPaused.Add(widgets.NewSDLLabel(0, 0, 250, btnHeight, LABEL_RELOAD, "Reload", widgets.ALIGN_LEFT, btnBg, nil, widgets.WIDGET_STYLE_NONE))
 	buttonsPaused.Add(loadFile)
 	buttonsPaused.Add(pathEntry1)
 
@@ -418,7 +419,7 @@ func average(lg *go_life.LifeGen) (int32, int32) {
 	return sumX / tot, sumY / tot
 }
 
-func updateButtons(renderer *sdl.Renderer, wg *SDL_WidgetGroup) {
+func updateButtons(renderer *sdl.Renderer, wg *widgets.SDL_WidgetGroup) {
 	wl := wg.AllWidgets()
 	for _, w := range wl {
 		ww := *w
@@ -430,7 +431,7 @@ func updateButtons(renderer *sdl.Renderer, wg *SDL_WidgetGroup) {
 		case BUTTON_STEP:
 			ww.SetVisible(lifeGen.GetRunFor() < 2)
 		case LABEL_SPEED:
-			ww.(*SDL_Label).SetText(fmt.Sprintf("Speed:%d", (MAX_LOOP_DELAY/50)-(loopDelay/50)))
+			ww.(*widgets.SDL_Label).SetText(fmt.Sprintf("Speed:%d", (MAX_LOOP_DELAY/50)-(loopDelay/50)))
 		case PATH_ENTRY1:
 			x, _ := ww.GetPosition()
 			ww.SetSize(renderer.GetViewport().W-x-300, -1)
