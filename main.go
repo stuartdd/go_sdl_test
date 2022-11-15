@@ -110,6 +110,7 @@ func run() int {
 	}
 	defer font.Close()
 
+	widgets.GetResourceInstance().SetFont(font)
 	running := true
 
 	err = loadRleFile("testdata/1234_synth.rle")
@@ -154,7 +155,6 @@ func run() int {
 		running = false
 		return true
 	})
-
 	btnSlower := widgets.NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_SLOWER, "slower", 0, 1, widgets.WIDGET_STYLE_BORDER_AND_BG, 0, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		loopDelay = loopDelay + STEP_LOOP_DELAY
 		if loopDelay > MAX_LOOP_DELAY {
@@ -191,10 +191,10 @@ func run() int {
 		return true
 	})
 
-	labelGen := widgets.NewSDLLabel(0, 0, 290, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_BORDER_AND_BG)
-	labelSpeed := widgets.NewSDLLabel(0, 0, 270, btnHeight, LABEL_SPEED, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_BORDER_AND_BG)
+	labelGen := widgets.NewSDLLabel(0, 0, 290, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
+	labelSpeed := widgets.NewSDLLabel(0, 0, 270, btnHeight, LABEL_SPEED, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
 
-	var loadFile *widgets.SDL_Image
+	var loadFile *widgets.SDL_Button
 
 	pathEntry1 := widgets.NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY1, rleFile.Filename(), widgets.WIDGET_STYLE_BORDER_AND_BG, func(old, new string, t widgets.TEXT_CHANGE_TYPE) (string, error) {
 		fmt.Printf("OnChange old:'%s' new:'%s', type:%d\n", old, new, t)
@@ -204,7 +204,7 @@ func run() int {
 		return new, err
 	})
 
-	loadFile = widgets.NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_LOAD_FILE, "fileload", 0, 1, widgets.WIDGET_STYLE_BORDER_AND_BG, 0, func(s widgets.SDL_Widget, i1, i2 int32) bool {
+	loadFile = widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_LOAD_FILE, "Load", widgets.WIDGET_STYLE_BORDER_AND_BG, 0, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		loadRleFile(pathEntry1.GetText())
 		return true
 	})
@@ -253,7 +253,7 @@ func run() int {
 	buttonsTL.Add(btnClose)
 	buttonsTL.Add(btnStop)
 	buttonsTL.Add(labelGen)
-	buttonsTL.Add(widgets.NewSDLSeparator(0, 0, 10, btnHeight, 999, widgets.WIDGET_STYLE_BORDER_AND_BG))
+	buttonsTL.Add(widgets.NewSDLSeparator(0, 0, 20, btnHeight, 999, widgets.WIDGET_STYLE_DRAW_BORDER))
 	buttonsTL.Add(btnStep)
 	buttonsTR.Add(btnZoomIn)
 	buttonsTR.Add(btnZoomOut)
@@ -262,8 +262,7 @@ func run() int {
 	buttonsPaused.Add(btnFaster)
 	buttonsPaused.Add(btnFastest)
 	buttonsPaused.Add(labelSpeed)
-	buttonsPaused.Add(widgets.NewSDLSeparator(0, 0, 10, btnHeight, 999, widgets.WIDGET_STYLE_BORDER_AND_BG))
-	buttonsPaused.Add(widgets.NewSDLLabel(0, 0, 250, btnHeight, LABEL_RELOAD, "Reload", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE))
+	buttonsPaused.Add(widgets.NewSDLSeparator(0, 0, 20, btnHeight, 999, widgets.WIDGET_STYLE_DRAW_BORDER))
 	buttonsPaused.Add(loadFile)
 	buttonsPaused.Add(pathEntry1)
 
@@ -339,7 +338,7 @@ func run() int {
 						mouseData.SetButtons(t.Button)
 						mouseData.SetWidgetId(widgetId)
 						widgetGroup.SetFocused(widgetId)
-						w.Click(mouseData)
+						go w.Click(mouseData)
 					} else {
 						if mouseData.IsDragging() {
 							mouseData.SetDragged(true)
@@ -443,7 +442,7 @@ func updateButtons(renderer *sdl.Renderer, wg *widgets.SDL_WidgetGroup) {
 	for _, l := range ll {
 		switch l.GetId() {
 		case LIST_ARROWS:
-			l.SetEnable(lifeGen.GetRunFor() < 2)
+			l.SetVisible(lifeGen.GetRunFor() < 2)
 		case LIST_TOP_LEFT:
 			x, y = l.ArrangeLR(btnGap, btnMarginTop, btnGap)
 			wg.GetWidgetSubGroup(LIST_PAUSED).ArrangeLR(x, y, btnGap)
