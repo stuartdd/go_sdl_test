@@ -198,6 +198,9 @@ func run() int {
 
 	pathEntry1 := widgets.NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY1, rleFile.Filename(), widgets.WIDGET_STYLE_BORDER_AND_BG, func(old, new string, t widgets.TEXT_CHANGE_TYPE) (string, error) {
 		fmt.Printf("OnChange old:'%s' new:'%s', type:%d\n", old, new, t)
+		if t == widgets.TEXT_CHANGE_SELECTED {
+			return new, err
+		}
 		_, err := os.Stat(new)
 		loadFile.SetEnabled(err == nil)
 		updateButtons(renderer, widgetGroup)
@@ -300,11 +303,13 @@ func run() int {
 			case *sdl.QuitEvent:
 				running = false
 			case *sdl.TextInputEvent:
+				fmt.Println("TextInputEvent")
 				for _, c := range t.GetText() {
 					widgetGroup.KeyPress(int(c), false, true)
 				}
 			case *sdl.KeyboardEvent:
 				ks := t.Keysym.Sym
+				fmt.Printf("KeyboardEvent %d %d\n", ks, t.State)
 				if t.State == sdl.PRESSED {
 					if ks == sdl.K_ESCAPE {
 						running = false
@@ -325,7 +330,6 @@ func run() int {
 				} else {
 					mouseData.SetDragging(false)
 					mouseData.SetXY(t.X, t.Y)
-					widgetGroup.ClearSelection()
 				}
 			case *sdl.MouseButtonEvent:
 				x := t.X
