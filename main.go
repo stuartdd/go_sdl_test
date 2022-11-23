@@ -28,9 +28,10 @@ const (
 	LIST_PAUSED
 	LIST_ARROWS
 	LIST_TOP_RIGHT
+	STATUS_BOTTOM_LEFT
 	LABEL_GEN
 	LABEL_SPEED
-	LABEL_RELOAD
+	LABEL_LOG
 	PATH_ENTRY1
 	PATH_ENTRY2
 	ARROW_UP
@@ -53,7 +54,7 @@ var (
 	mouseData           *widgets.SDL_MouseData = &widgets.SDL_MouseData{}
 	btnHeight           int32                  = 70
 	btnMarginTop        int32                  = 10
-	btnWidth            int32                  = 150
+	btnWidth            int32                  = 200
 	btnGap              int32                  = 10
 	btnTopMarginHeight  int32                  = btnHeight + (btnMarginTop * 2)
 	mouseOn                                    = false
@@ -127,6 +128,7 @@ func run() int {
 	buttonsTL := widgetGroup.NewWidgetSubGroup(nil, LIST_TOP_LEFT)
 	buttonsPaused := widgetGroup.NewWidgetSubGroup(nil, LIST_PAUSED)
 	buttonsTR := widgetGroup.NewWidgetSubGroup(nil, LIST_TOP_RIGHT)
+	statusBL := widgetGroup.NewWidgetSubGroup(nil, STATUS_BOTTOM_LEFT)
 
 	// Load image resources
 	err = widgets.GetResourceInstance().AddTexturesFromFileMap(renderer, resources, map[string]string{
@@ -191,9 +193,11 @@ func run() int {
 		return true
 	})
 
-	labelGen := widgets.NewSDLLabel(0, 0, 290, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
-	labelSpeed := widgets.NewSDLLabel(0, 0, 270, btnHeight, LABEL_SPEED, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
-
+	labelGen := widgets.NewSDLLabel(0, 0, 350, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
+	labelSpeed := widgets.NewSDLLabel(0, 0, 350, btnHeight, LABEL_SPEED, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
+	labelLog := widgets.NewSDLLabel(0, viewPort.H-btnHeight, viewPort.W, btnHeight, LABEL_LOG, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_BORDER)
+	labelLog.SetForeground(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
+	labelLog.SetBorderColour(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
 	var loadFile *widgets.SDL_Button
 
 	pathEntry1 := widgets.NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY1, rleFile.Filename(), widgets.WIDGET_STYLE_BORDER_AND_BG, func(old, new string, t widgets.TEXT_CHANGE_TYPE) (string, error) {
@@ -206,7 +210,7 @@ func run() int {
 		return new, err
 	})
 
-	loadFile = widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_LOAD_FILE, "Load", widgets.WIDGET_STYLE_BORDER_AND_BG, 0, func(s widgets.SDL_Widget, i1, i2 int32) bool {
+	loadFile = widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_LOAD_FILE, "Load", widgets.WIDGET_STYLE_BORDER_AND_BG, 500, func(s widgets.SDL_Widget, i1, i2 int32) bool {
 		loadRleFile(pathEntry1.GetText())
 		return true
 	})
@@ -272,6 +276,8 @@ func run() int {
 	arrows.Add(arrowD)
 	arrows.Add(arrowL)
 	arrows.Add(arrowU)
+
+	statusBL.Add(labelLog)
 
 	buttonsPaused.SetVisible(true)
 
@@ -422,6 +428,8 @@ func average(lg *go_life.LifeGen) (int32, int32) {
 }
 
 func updateButtons(renderer *sdl.Renderer, wg *widgets.SDL_WidgetGroup) {
+	viewport := renderer.GetViewport()
+
 	wl := wg.AllWidgets()
 	for _, w := range wl {
 		ww := *w
@@ -436,7 +444,11 @@ func updateButtons(renderer *sdl.Renderer, wg *widgets.SDL_WidgetGroup) {
 			ww.(*widgets.SDL_Label).SetText(fmt.Sprintf("Speed:%d", (MAX_LOOP_DELAY/50)-(loopDelay/50)))
 		case PATH_ENTRY1:
 			x, _ := ww.GetPosition()
-			ww.SetSize(renderer.GetViewport().W-x-300, -1)
+			ww.SetSize(viewport.W-x-300, -1)
+		case LABEL_LOG:
+			_, h := ww.GetSize()
+			ww.SetPosition(0, viewport.H-h)
+			ww.SetSize(renderer.GetViewport().W, -1)
 		}
 	}
 
