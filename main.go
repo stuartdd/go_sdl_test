@@ -195,9 +195,9 @@ func run() int {
 
 	labelGen := widgets.NewSDLLabel(0, 0, 350, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
 	labelSpeed := widgets.NewSDLLabel(0, 0, 350, btnHeight, LABEL_SPEED, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
-	labelLog := widgets.NewSDLLabel(0, viewPort.H-btnHeight, viewPort.W, btnHeight, LABEL_LOG, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_BORDER)
-	labelLog.SetForeground(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
-	labelLog.SetBorderColour(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
+	labelStatus := widgets.NewSDLLabel(0, viewPort.H-btnHeight, viewPort.W, btnHeight, LABEL_LOG, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_BORDER)
+	labelStatus.SetForeground(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
+	labelStatus.SetBorderColour(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
 	var loadFile *widgets.SDL_Button
 
 	pathEntry1 := widgets.NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY1, rleFile.Filename(), widgets.WIDGET_STYLE_BORDER_AND_BG, func(old, new string, t widgets.TEXT_CHANGE_TYPE) (string, error) {
@@ -208,6 +208,18 @@ func run() int {
 		loadFile.SetEnabled(err == nil)
 		updateButtons(renderer, widgetGroup)
 		return new, err
+	})
+
+	pathEntry1.SetLog(func(i widgets.LOG_LEVEL, s string) {
+		switch i {
+		case widgets.LOG_LEVEL_ERROR:
+			labelStatus.SetForeground(&sdl.Color{R: 255, G: 0, B: 0, A: 255})
+		case widgets.LOG_LEVEL_WARN:
+			labelStatus.SetForeground(&sdl.Color{R: 0, G: 255, B: 255, A: 255})
+		default:
+			labelStatus.SetForeground(&sdl.Color{R: 0, G: 255, B: 0, A: 255})
+		}
+		labelStatus.SetText(s)
 	})
 
 	loadFile = widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_LOAD_FILE, "Load", widgets.WIDGET_STYLE_BORDER_AND_BG, 500, func(s widgets.SDL_Widget, i1, i2 int32) bool {
@@ -277,7 +289,7 @@ func run() int {
 	arrows.Add(arrowL)
 	arrows.Add(arrowU)
 
-	statusBL.Add(labelLog)
+	statusBL.Add(labelStatus)
 
 	buttonsPaused.SetVisible(true)
 
@@ -290,7 +302,7 @@ func run() int {
 		for running {
 			labelGen.SetText(fmt.Sprintf("Gen:%d", lifeGen.GetGenerationCount()))
 			updateButtons(renderer, widgetGroup)
-			sdl.Delay(500)
+			sdl.Delay(400)
 		}
 	}()
 
@@ -298,6 +310,13 @@ func run() int {
 		for running {
 			sdl.Delay(loopDelay)
 			lifeGen.NextGen()
+		}
+	}()
+
+	go func() {
+		for running {
+			sdl.Delay(1000)
+			labelStatus.SetText(pathEntry1.GetSelectedText())
 		}
 	}()
 
