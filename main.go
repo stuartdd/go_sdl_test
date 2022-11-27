@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
 	go_life "github.com/stuartdd/go_life_engine"
 	widgets "github.com/stuartdd/go_sdl_widget"
@@ -49,6 +50,9 @@ var (
 	winTitle            string = "Go-SDL2 Render"
 	winWidth, winHeight int32  = 900, 900
 	displayMode         sdl.DisplayMode
+	viewport            sdl.Rect
+	statusLabel         *widgets.SDL_Label
+	statusGroup         *widgets.SDL_WidgetSubGroup
 	fontSize            int                    = 50
 	btnFg                                      = &sdl.Color{R: 0, G: 255, B: 0, A: 255}
 	mouseData           *widgets.SDL_MouseData = &widgets.SDL_MouseData{}
@@ -88,13 +92,16 @@ func run() int {
 		if err == nil {
 			fmt.Printf("Window W:%d H:%d \n", displayMode.W, displayMode.H)
 			window.SetSize(displayMode.W, displayMode.H)
+		} else {
+			fmt.Fprintf(os.Stderr, "Failed to obtain displa mode: %s\n", err)
+			return 2
 		}
 	}
 
 	renderer, err = sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create renderer: %s\n", err)
-		return 2
+		return 3
 	}
 	defer renderer.Destroy()
 
@@ -118,8 +125,8 @@ func run() int {
 	if err != nil {
 		fmt.Printf("Unable to load file %e", err)
 	}
-	viewPort := renderer.GetViewport()
-	cellOffsetX, cellOffsetY = centerOnXY(viewPort.W/2, viewPort.H/2, lifeGen)
+	viewport = renderer.GetViewport()
+	cellOffsetX, cellOffsetY = centerOnXY(viewport.W/2, viewport.H/2, lifeGen)
 
 	widgetGroup := widgets.NewWidgetGroup(font)
 	defer widgetGroup.Destroy()
@@ -128,7 +135,7 @@ func run() int {
 	buttonsTL := widgetGroup.NewWidgetSubGroup(nil, LIST_TOP_LEFT)
 	buttonsPaused := widgetGroup.NewWidgetSubGroup(nil, LIST_PAUSED)
 	buttonsTR := widgetGroup.NewWidgetSubGroup(nil, LIST_TOP_RIGHT)
-	statusBL := widgetGroup.NewWidgetSubGroup(nil, STATUS_BOTTOM_LEFT)
+	statusGroup = widgetGroup.NewWidgetSubGroup(nil, STATUS_BOTTOM_LEFT)
 
 	// Load image resources
 	err = widgets.GetResourceInstance().AddTexturesFromFileMap(renderer, resources, map[string]string{
@@ -193,37 +200,23 @@ func run() int {
 		return true
 	})
 
-	labelGen := widgets.NewSDLLabel(0, 0, 350, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
+	labelGen := widgets.NewSDLLabel(0, 0, 380, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
 	labelSpeed := widgets.NewSDLLabel(0, 0, 350, btnHeight, LABEL_SPEED, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
-	labelStatus := widgets.NewSDLLabel(0, viewPort.H-btnHeight, viewPort.W, btnHeight, LABEL_LOG, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_BORDER)
-	labelStatus.SetForeground(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
-	labelStatus.SetBorderColour(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
+	statusLabel = widgets.NewSDLLabel(0, viewport.H-btnHeight, viewport.W, btnHeight, LABEL_LOG, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_BORDER)
+	statusLabel.SetBorderColour(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
 	var loadFile *widgets.SDL_Button
 
 	pathEntry1 := widgets.NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY1, rleFile.Filename(), widgets.WIDGET_STYLE_BORDER_AND_BG, func(old, new string, t widgets.TEXT_CHANGE_TYPE) (string, error) {
-		if t == widgets.TEXT_CHANGE_SELECTED {
-			return new, err
-		}
 		_, err := os.Stat(new)
+		setErrorStatus(err)
 		loadFile.SetEnabled(err == nil)
 		updateButtons(renderer, widgetGroup)
 		return new, err
 	})
 
-	pathEntry1.SetLog(func(i widgets.LOG_LEVEL, s string) {
-		switch i {
-		case widgets.LOG_LEVEL_ERROR:
-			labelStatus.SetForeground(&sdl.Color{R: 255, G: 0, B: 0, A: 255})
-		case widgets.LOG_LEVEL_WARN:
-			labelStatus.SetForeground(&sdl.Color{R: 0, G: 255, B: 255, A: 255})
-		default:
-			labelStatus.SetForeground(&sdl.Color{R: 0, G: 255, B: 0, A: 255})
-		}
-		labelStatus.SetText(s)
-	})
-
 	loadFile = widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_LOAD_FILE, "Load", widgets.WIDGET_STYLE_BORDER_AND_BG, 500, func(s widgets.SDL_Widget, i1, i2 int32) bool {
-		loadRleFile(pathEntry1.GetText())
+		err := loadRleFile(pathEntry1.GetText())
+		setErrorStatus(err)
 		return true
 	})
 
@@ -289,9 +282,10 @@ func run() int {
 	arrows.Add(arrowL)
 	arrows.Add(arrowU)
 
-	statusBL.Add(labelStatus)
+	statusGroup.Add(statusLabel)
 
 	buttonsPaused.SetVisible(true)
+	setErrorStatus(nil)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load 'lem': %s\n", err)
@@ -313,15 +307,8 @@ func run() int {
 		}
 	}()
 
-	go func() {
-		for running {
-			sdl.Delay(1000)
-			labelStatus.SetText(pathEntry1.GetSelectedText())
-		}
-	}()
-
 	for running {
-		viewPort := renderer.GetViewport()
+		viewport = renderer.GetViewport()
 		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 			switch t := event.(type) {
 			case *sdl.QuitEvent:
@@ -343,40 +330,26 @@ func run() int {
 				}
 			case *sdl.MouseMotionEvent:
 				w := widgetGroup.Inside(t.X, t.Y)
-				if w != nil && w.GetWidgetId() == mouseData.GetWidgetId() {
-					if t.State == sdl.PRESSED {
-						mouseData.SetDragging(true)
-						mouseData.SetXY(t.X, t.Y)
-						mouseData.SetClickCount(1)
-						w.Click(mouseData)
-					}
+				if w != nil && w.GetWidgetId() == mouseData.GetWidgetId() && t.State == sdl.PRESSED {
+					w.Click(mouseData.ActionStartDragging(t))
 				} else {
-					mouseData.SetDragging(false)
-					mouseData.SetXY(t.X, t.Y)
+					mouseData.ActionNotDragging(t)
 				}
 			case *sdl.MouseButtonEvent:
-				x := t.X
-				y := t.Y
-				w := widgetGroup.Inside(x, y)
+				w := widgetGroup.Inside(t.X, t.Y)
 				if w != nil {
 					if t.State == sdl.PRESSED {
-						widgetId := w.GetWidgetId()
-						mouseData.SetXY(x, y)
-						mouseData.SetButtons(t.Button)
-						mouseData.SetWidgetId(widgetId)
-						mouseData.SetClickCount(int(t.Clicks))
-						widgetGroup.SetFocused(widgetId)
-						go w.Click(mouseData)
+						widgetGroup.SetFocused(w.GetWidgetId())
+						go w.Click(mouseData.ActionMouseDown(t, w.GetWidgetId()))
 					} else {
 						if mouseData.IsDragging() {
-							mouseData.SetDragged(true)
-							w.Click(mouseData)
-							mouseData.SetDragged(false)
+							w.Click(mouseData.ActionStopDragging(t))
+							mouseData.ActionReset(t)
 						}
 					}
 				} else {
 					if widgetGroup.GetFocused() == nil {
-						cellOffsetX, cellOffsetY = centerOnXY(x, y, lifeGen)
+						cellOffsetX, cellOffsetY = centerOnXY(t.X, t.Y, lifeGen)
 					} else {
 						widgetGroup.ClearFocus()
 					}
@@ -388,7 +361,7 @@ func run() int {
 		renderer.SetDrawColor(0, 0, 0, 255)
 		renderer.Clear()
 		renderer.SetDrawColor(0, 78, 0, 255)
-		renderer.FillRect(&sdl.Rect{X: 0, Y: 0, W: viewPort.W, H: btnTopMarginHeight})
+		renderer.FillRect(&sdl.Rect{X: 0, Y: 0, W: viewport.W, H: btnTopMarginHeight})
 		renderer.SetDrawColor(0, 255, 255, 255)
 		cell := lifeGen.GetRootCell()
 		for cell != nil {
@@ -447,8 +420,6 @@ func average(lg *go_life.LifeGen) (int32, int32) {
 }
 
 func updateButtons(renderer *sdl.Renderer, wg *widgets.SDL_WidgetGroup) {
-	viewport := renderer.GetViewport()
-
 	wl := wg.AllWidgets()
 	for _, w := range wl {
 		ww := *w
@@ -467,7 +438,7 @@ func updateButtons(renderer *sdl.Renderer, wg *widgets.SDL_WidgetGroup) {
 		case LABEL_LOG:
 			_, h := ww.GetSize()
 			ww.SetPosition(0, viewport.H-h)
-			ww.SetSize(renderer.GetViewport().W, -1)
+			ww.SetSize(viewport.W, -1)
 		}
 	}
 
@@ -481,7 +452,7 @@ func updateButtons(renderer *sdl.Renderer, wg *widgets.SDL_WidgetGroup) {
 			x, y = l.ArrangeLR(btnGap, btnMarginTop, btnGap)
 			wg.GetWidgetSubGroup(LIST_PAUSED).ArrangeLR(x, y, btnGap)
 		case LIST_TOP_RIGHT:
-			l.ArrangeRL(renderer.GetViewport().W-btnGap, btnMarginTop, btnGap)
+			l.ArrangeRL(viewport.W-btnGap, btnMarginTop, btnGap)
 		}
 	}
 }
@@ -507,4 +478,15 @@ func loadRleFile(filename string) error {
 	lifeGen = go_life.NewLifeGen(func(lg *go_life.LifeGen) {}, go_life.RUN_FOR_EVER)
 	lifeGen.AddCellsAtOffset(0, 0, go_life.COLOUR_MODE_MASK, rleFile.Coords())
 	return nil
+}
+
+func setErrorStatus(e error) {
+	if e == nil {
+		statusGroup.SetVisible(false)
+	} else {
+		s := strings.TrimPrefix(e.Error(), "stat ")
+		statusLabel.SetForeground(&sdl.Color{R: 255, G: 0, B: 0, A: 255})
+		statusGroup.SetVisible(true)
+		statusLabel.SetText(s)
+	}
 }
