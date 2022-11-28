@@ -131,11 +131,11 @@ func run() int {
 	widgetGroup := widgets.NewWidgetGroup(font)
 	defer widgetGroup.Destroy()
 
-	arrows := widgetGroup.NewWidgetSubGroup(nil, LIST_ARROWS)
-	buttonsTL := widgetGroup.NewWidgetSubGroup(nil, LIST_TOP_LEFT)
-	buttonsPaused := widgetGroup.NewWidgetSubGroup(nil, LIST_PAUSED)
-	buttonsTR := widgetGroup.NewWidgetSubGroup(nil, LIST_TOP_RIGHT)
-	statusGroup = widgetGroup.NewWidgetSubGroup(nil, STATUS_BOTTOM_LEFT)
+	arrows := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_ARROWS, widgets.WIDGET_STYLE_NONE)
+	buttonsTL := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_TOP_LEFT, widgets.WIDGET_STYLE_NONE)
+	buttonsPaused := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_PAUSED, widgets.WIDGET_STYLE_NONE)
+	buttonsTR := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_TOP_RIGHT, widgets.WIDGET_STYLE_NONE)
+	statusGroup = widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, STATUS_BOTTOM_LEFT, widgets.WIDGET_STYLE_NONE)
 
 	// Load image resources
 	err = widgets.GetResourceInstance().AddTexturesFromFileMap(renderer, resources, map[string]string{
@@ -260,8 +260,6 @@ func run() int {
 		return true
 	})
 
-	wil := widgets.NewSDLList(100, 100, 100, 100, 999, widgets.WIDGET_STYLE_BORDER_AND_BG)
-
 	arrowU.Rotate(-90)
 
 	buttonsTL.Add(btnClose)
@@ -286,7 +284,6 @@ func run() int {
 	arrows.Add(arrowU)
 
 	statusGroup.Add(statusLabel)
-	statusGroup.Add(wil)
 
 	buttonsPaused.SetVisible(true)
 	setErrorStatus(nil)
@@ -333,17 +330,17 @@ func run() int {
 					widgetGroup.KeyPress(int(ks), true, false)
 				}
 			case *sdl.MouseMotionEvent:
-				w := widgetGroup.Inside(t.X, t.Y)
+				w := widgetGroup.InsideWidget(t.X, t.Y)
 				if w != nil && w.GetWidgetId() == mouseData.GetWidgetId() && t.State == sdl.PRESSED {
 					w.Click(mouseData.ActionStartDragging(t))
 				} else {
 					mouseData.ActionNotDragging(t)
 				}
 			case *sdl.MouseButtonEvent:
-				w := widgetGroup.Inside(t.X, t.Y)
+				w := widgetGroup.InsideWidget(t.X, t.Y)
 				if w != nil {
 					if t.State == sdl.PRESSED {
-						widgetGroup.SetFocused(w.GetWidgetId())
+						widgetGroup.SetFocusedId(w.GetWidgetId())
 						go w.Click(mouseData.ActionMouseDown(t, w.GetWidgetId()))
 					} else {
 						if mouseData.IsDragging() {
@@ -352,7 +349,7 @@ func run() int {
 						}
 					}
 				} else {
-					if widgetGroup.GetFocused() == nil {
+					if widgetGroup.GetFocusedWidget() == nil {
 						cellOffsetX, cellOffsetY = centerOnXY(t.X, t.Y, lifeGen)
 					} else {
 						widgetGroup.ClearFocus()
@@ -448,7 +445,7 @@ func updateButtons(renderer *sdl.Renderer, wg *widgets.SDL_WidgetGroup) {
 	var x, y int32 = 0, 0
 	ll := wg.AllSubGroups()
 	for _, l := range ll {
-		switch l.GetId() {
+		switch l.GetWidgetId() {
 		case LIST_ARROWS:
 			l.SetVisible(lifeGen.GetRunFor() < 2)
 		case LIST_TOP_LEFT:
