@@ -259,6 +259,9 @@ func run() int {
 		cellOffsetY = cellOffsetY - 100
 		return true
 	})
+
+	wil := widgets.NewSDLList(100, 100, 100, 100, 999, widgets.WIDGET_STYLE_BORDER_AND_BG)
+
 	arrowU.Rotate(-90)
 
 	buttonsTL.Add(btnClose)
@@ -283,6 +286,7 @@ func run() int {
 	arrows.Add(arrowU)
 
 	statusGroup.Add(statusLabel)
+	statusGroup.Add(wil)
 
 	buttonsPaused.SetVisible(true)
 	setErrorStatus(nil)
@@ -421,9 +425,8 @@ func average(lg *go_life.LifeGen) (int32, int32) {
 
 func updateButtons(renderer *sdl.Renderer, wg *widgets.SDL_WidgetGroup) {
 	wl := wg.AllWidgets()
-	for _, w := range wl {
-		ww := *w
-		switch (*w).GetWidgetId() {
+	for _, ww := range wl {
+		switch ww.GetWidgetId() {
 		case BUTTON_FASTEST, BUTTON_FASTER:
 			ww.SetEnabled(loopDelay > MIN_LOOP_DELAY)
 		case BUTTON_SLOWER:
