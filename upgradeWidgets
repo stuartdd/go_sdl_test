@@ -1,0 +1,7 @@
+#!/bin/bash
+
+go get github.com/stuartdd/go_sdl_widget@$1
+go mod tidy
+echo DONE
+pwd
+

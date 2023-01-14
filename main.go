@@ -11,7 +11,6 @@ import (
 	go_life "github.com/stuartdd/go_life_engine"
 	widgets "github.com/stuartdd/go_sdl_widget"
 	"github.com/veandco/go-sdl2/sdl"
-	"github.com/veandco/go-sdl2/ttf"
 )
 
 const (
@@ -129,20 +128,8 @@ func run() int {
 	}
 	defer renderer.Destroy()
 
-	// Load the font and ensure it is Closed() properly
-	if err = ttf.Init(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to init the ttf font system: %s\n", err)
-		return 1
-	}
-	defer ttf.Quit()
-	font, err := ttf.OpenFont(path.Join(resources, "buttonFont.ttf"), fontSize)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load the font: %s\n", err)
-		return 1
-	}
-	defer font.Close()
-
-	widgets.GetResourceInstance().SetFont(font)
+	widgets.GetResourceInstance().LoadFont(path.Join(resources, "buttonFont.ttf"), fontSize)
+	defer widgets.GetResourceInstance().Destroy()
 	running := true
 
 	err = loadRleFile("testdata/1234_synth.rle")
@@ -152,38 +139,52 @@ func run() int {
 	viewport = renderer.GetViewport()
 	cellOffsetX, cellOffsetY = centerOnXY(viewport.W/2, viewport.H/2, lifeGen)
 
-	widgetGroup := widgets.NewWidgetGroup(font)
+	widgetGroup := widgets.NewWidgetGroup(nil)
 	defer widgetGroup.Destroy()
 
 	scaleEverything(renderer, 1.0, widgetGroup)
 
-	buttonsRunning := widgetGroup.NewWidgetSubGroup(0, 100, 0, 0, LIST_RUNNING, widgets.WIDGET_STYLE_NONE)
-	buttonsPaused := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_PAUSED, widgets.WIDGET_STYLE_NONE)
-	statusGroup = widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, STATUS_BOTTOM_LEFT, widgets.WIDGET_STYLE_NONE)
-	buttonsTR := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_TOP_RIGHT, widgets.WIDGET_STYLE_NONE)
-	buttonsTL := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_TOP_LEFT, widgets.WIDGET_STYLE_NONE)
-	arrows := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_ARROWS, widgets.WIDGET_STYLE_NONE)
+	buttonsRunning := widgetGroup.NewWidgetSubGroup(0, 100, 0, 0, LIST_RUNNING, widgets.WIDGET_STYLE_DRAW_NONE)
+	buttonsPaused := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_PAUSED, widgets.WIDGET_STYLE_DRAW_NONE)
+	statusGroup = widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, STATUS_BOTTOM_LEFT, widgets.WIDGET_STYLE_DRAW_NONE)
+	buttonsTR := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_TOP_RIGHT, widgets.WIDGET_STYLE_DRAW_NONE)
+	buttonsTL := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_TOP_LEFT, widgets.WIDGET_STYLE_DRAW_NONE)
+	arrows := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_ARROWS, widgets.WIDGET_STYLE_DRAW_NONE)
 
 	// Load image resources
 	err = widgets.GetResourceInstance().AddTexturesFromFileMap(renderer, resources, map[string]string{
-		"lem":      "lem.png",
-		"slower":   "slower.png",
-		"faster":   "faster.png",
-		"fastest":  "fastest.png",
-		"zoomin":   "zoom-in.png",
-		"zoomout":  "zoom-out.png",
-		"fileload": "file-load.png",
-	})
-
+		"lem":         "lem.png",
+		"slower":      "slower.png",
+		"faster":      "faster.png",
+		"fastest":     "fastest.png",
+		"zoomin":      "zoom-in.png",
+		"zoomout":     "zoom-out.png",
+		"fileload":    "file-load.png",
+		"ButtonImage": "ButtonImage.png",
+	}, &sdl.Color{R: 255, G: 255, B: 255, A: 255})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load file textures: %s\n", err)
 		return 1
 	}
 
-	btnClose := widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_CLOSE, "Quit", widgets.WIDGET_STYLE_DRAW_BORDER_AND_BG, 0, func(s string, b, i1, i2 int32) bool {
+	err = widgets.GetResourceInstance().AddTexturesFromFileMap(renderer, resources, map[string]string{
+		"slower.dis":      "slower.png",
+		"faster.dis":      "faster.png",
+		"fastest.dis":     "fastest.png",
+		"zoomin.dis":      "zoom-in.png",
+		"zoomout.dis":     "zoom-out.png",
+		"ButtonImage.dis": "ButtonImage.png",
+	}, &sdl.Color{R: 255, G: 255, B: 255, A: 255}, widgets.GetResourceInstance().GetColour(widgets.WIDGET_COLOUR_STATE_DISABLE, widgets.WIDGET_COLOUR_STYLE_FG))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load file textures (.dis): %s\n", err)
+		return 1
+	}
+
+	btnClose := widgets.NewSDLButton(0, 0, 0, 0, BUTTON_CLOSE, "Exit", widgets.WIDGET_STYLE_DRAW_NONE, 0, func(s string, b, i1, i2 int32) bool {
 		running = false
 		return true
 	})
+	btnClose.SetBackgroundImage("ButtonImage")
 
 	btnSlower := widgets.NewSDLImage(0, 0, btnHeight, btnHeight, BUTTON_SLOWER, "slower", 0, 1, widgets.WIDGET_STYLE_DRAW_BORDER_AND_BG, 0, func(s string, b, i1, i2 int32) bool {
 		loopDelay = loopDelay + STEP_LOOP_DELAY
@@ -215,8 +216,8 @@ func run() int {
 		return true
 	})
 
-	labelGen := widgets.NewSDLLabel(0, 0, 600, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
-	labelSpeed := widgets.NewSDLLabel(0, 0, 350, btnHeight, LABEL_SPEED, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_NONE)
+	labelGen := widgets.NewSDLLabel(0, 0, 600, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_NONE)
+	labelSpeed := widgets.NewSDLLabel(0, 0, 350, btnHeight, LABEL_SPEED, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_NONE)
 	statusLabel = widgets.NewSDLLabel(0, viewport.H-btnHeight, viewport.W, btnHeight, LABEL_LOG, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_BORDER)
 	statusLabel.SetBorderColour(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
 
@@ -233,41 +234,45 @@ func run() int {
 		return new, err
 	})
 
-	fileList, err = widgets.NewFileList(0, 0, btnHeight, LIST_FILES, path.Dir(rleFile.Filename()), nil, widgets.WIDGET_STYLE_DRAW_BORDER, func(s string, i widgets.FILE_LIST_RESPONSE_CODE, id int32) bool {
-		switch i {
-		case widgets.FILE_LIST_FILE_SELECT:
-			pathEntry.SetText(s)
-			return true
-		case widgets.FILE_LIST_PATH_SELECT:
-			fileList.Reload(s)
-			return true
-		}
-		return false
-	}, func(b bool, s string) bool {
-		if b {
-			return !strings.HasPrefix(strings.ToLower(s), ".")
-		}
-		return strings.HasSuffix(strings.ToLower(s), ".rle")
-	})
+	fileList, err = widgets.NewFileList(0, 0, btnHeight, LIST_FILES, path.Dir(rleFile.Filename()), nil, widgets.WIDGET_STYLE_DRAW_BORDER,
+		func(s string, i widgets.FILE_LIST_RESPONSE_CODE, id int32) bool {
+			switch i {
+			case widgets.FILE_LIST_FILE_SELECT:
+				pathEntry.SetText(s)
+				return true
+			case widgets.FILE_LIST_PATH_SELECT:
+				fileList.Reload(s)
+				return true
+			}
+			return false
+		},
+		func(isDir bool, name string) bool {
+			if isDir {
+				return !strings.HasPrefix(strings.ToLower(name), ".")
+			}
+			return strings.HasSuffix(strings.ToLower(name), ".rle")
+		})
 
 	fileList.SetVisible(false)
 	fileList.SetLog(func(l widgets.LOG_LEVEL, s string) {
 		setStatus(l, s)
 	})
 
-	loadFile = widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_LOAD_FILE, "Load", widgets.WIDGET_STYLE_DRAW_BORDER_AND_BG, 500, func(s string, b, i1, i2 int32) bool {
+	loadFile = widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_LOAD_FILE, "Load", widgets.WIDGET_STYLE_DRAW_NONE, 500, func(s string, b, i1, i2 int32) bool {
 		err := loadRleFile(pathEntry.GetText())
 		setErrorStatus(err)
 		return true
 	})
+	loadFile.SetBackgroundImage("ButtonImage")
 
-	btnStep := widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_STEP, "Step", widgets.WIDGET_STYLE_DRAW_BORDER_AND_BG, 0, func(s string, b, i1, i2 int32) bool {
+	btnStep := widgets.NewSDLButton(0, 0, btnWidth, btnHeight, BUTTON_STEP, "Step", widgets.WIDGET_STYLE_DRAW_NONE, 0, func(s string, b, i1, i2 int32) bool {
 		lifeGen.SetRunFor(1, nil)
 		return true
 	})
+	btnStep.SetBackgroundImage("ButtonImage")
 
 	var btnStop *widgets.SDL_Button
-	btnStop = widgets.NewSDLButton(0, 0, btnWidth+30, btnHeight, BUTTON_STOP_START, "Stop", widgets.WIDGET_STYLE_DRAW_BORDER_AND_BG, 500, func(s string, b, i1, i2 int32) bool {
+	btnStop = widgets.NewSDLButton(0, 0, btnWidth+30, btnHeight, BUTTON_STOP_START, "Stop", widgets.WIDGET_STYLE_DRAW_NONE, 500, func(s string, b, i1, i2 int32) bool {
 		if lifeGen.IsRunning() {
 			lifeGen.SetRunFor(0, nil)
 			btnStop.SetText("Start")
@@ -279,6 +284,7 @@ func run() int {
 		}
 		return true
 	})
+	btnStop.SetBackgroundImage("ButtonImage")
 
 	arrowR := widgets.NewSDLShapeArrowRight(arrowPosX, arrowPosY, 100, 100, ARROW_RIGHT, widgets.WIDGET_STYLE_DRAW_BORDER_AND_BG, func(s string, b, i1, i2 int32) bool {
 		cellOffsetX = cellOffsetX + 100
@@ -314,12 +320,11 @@ func run() int {
 	buttonsRunning.Add(btnFastest)
 	buttonsRunning.Add(labelSpeed)
 	buttonsRunning.Add(widgets.NewSDLSeparator(0, 0, 20, btnHeight, 999, widgets.WIDGET_STYLE_DRAW_BORDER))
-
-	buttonsPaused.Add(btnStep)
-	buttonsRunning.Add(widgets.NewSDLSeparator(0, 0, 20, btnHeight, 999, widgets.WIDGET_STYLE_DRAW_BORDER))
 	buttonsRunning.Add(loadFile)
 	buttonsRunning.Add(pathEntry)
 	buttonsRunning.Add(fileList)
+
+	buttonsPaused.Add(btnStep)
 
 	arrows.Add(arrowR)
 	arrows.Add(arrowD)
@@ -543,7 +548,6 @@ func zoomGrid(y int32) {
 	if cellSize < 2 {
 		cellSize = 1
 	}
-	fmt.Printf("Size = %d Scale = %d\n", cellSize, gridSize)
 }
 
 func loadRleFile(filename string) error {
