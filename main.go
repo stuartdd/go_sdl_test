@@ -127,7 +127,11 @@ func run() int {
 		return 3
 	}
 	defer renderer.Destroy()
-
+	err = widgets.GetResourceInstance().Config("config.properties")
+	if err != nil {
+		fmt.Printf("Config Error: %s", err.Error())
+		return 1
+	}
 	widgets.GetResourceInstance().LoadFont(path.Join(resources, "buttonFont.ttf"), fontSize)
 	defer widgets.GetResourceInstance().Destroy()
 	running := true
@@ -161,7 +165,7 @@ func run() int {
 		"zoomout":     "zoom-out.png",
 		"fileload":    "file-load.png",
 		"ButtonImage": "ButtonImage.png",
-	}, &sdl.Color{R: 255, G: 255, B: 255, A: 255})
+	}, &sdl.Color{R: 255, G: 255, B: 255, A: 255}, widgets.GetResourceInstance().GetColour(widgets.WIDGET_COLOUR_INDEX_ENABLED, widgets.WIDGET_COLOUR_STYLE_FG))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load file textures: %s\n", err)
 		return 1
@@ -174,7 +178,7 @@ func run() int {
 		"zoomin.dis":      "zoom-in.png",
 		"zoomout.dis":     "zoom-out.png",
 		"ButtonImage.dis": "ButtonImage.png",
-	}, &sdl.Color{R: 255, G: 255, B: 255, A: 255}, widgets.GetResourceInstance().GetColour(widgets.WIDGET_COLOUR_STATE_DISABLE, widgets.WIDGET_COLOUR_STYLE_FG))
+	}, &sdl.Color{R: 255, G: 255, B: 255, A: 255}, widgets.GetResourceInstance().GetColour(widgets.WIDGET_COLOUR_INDEX_DISABLE, widgets.WIDGET_COLOUR_STYLE_FG))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load file textures (.dis): %s\n", err)
 		return 1
@@ -219,11 +223,10 @@ func run() int {
 	labelGen := widgets.NewSDLLabel(0, 0, 600, btnHeight, LABEL_GEN, "Gen:0", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_NONE)
 	labelSpeed := widgets.NewSDLLabel(0, 0, 350, btnHeight, LABEL_SPEED, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_NONE)
 	statusLabel = widgets.NewSDLLabel(0, viewport.H-btnHeight, viewport.W, btnHeight, LABEL_LOG, "Delay:0ms", widgets.ALIGN_LEFT, widgets.WIDGET_STYLE_DRAW_BORDER)
-	statusLabel.SetBorderColour(&sdl.Color{R: 100, G: 100, B: 100, A: 255})
 
 	var loadFile *widgets.SDL_Button
 	var fileList *widgets.SDL_FileList
-	pathEntry := widgets.NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY, rleFile.Filename(), widgets.WIDGET_STYLE_DRAW_BORDER_AND_BG, func(old, new string, t widgets.ENTRY_EVENT_TYPE) (string, error) {
+	pathEntry := widgets.NewSDLEntry(0, 0, 500, btnHeight, PATH_ENTRY, rleFile.Filename(), widgets.WIDGET_STYLE_DRAW_BORDER, func(old, new string, t widgets.ENTRY_EVENT_TYPE) (string, error) {
 		switch t {
 		case widgets.ENTRY_EVENT_FOCUS:
 			fileList.Show(viewport)
@@ -566,8 +569,9 @@ func setErrorStatus(e error) {
 		statusGroup.SetVisible(false)
 	} else {
 		s := strings.TrimPrefix(e.Error(), "stat ")
-		statusLabel.SetForeground(&sdl.Color{R: 255, G: 0, B: 0, A: 255})
+		// statusLabel.SetForeground(&sdl.Color{R: 255, G: 0, B: 0, A: 255})
 		statusGroup.SetVisible(true)
+		statusLabel.SetError(true)
 		statusLabel.SetText(s)
 	}
 }
@@ -576,8 +580,9 @@ func setStatus(l widgets.LOG_LEVEL, s string) {
 	if s == "" {
 		statusGroup.SetVisible(false)
 	} else {
-		statusLabel.SetForeground(&sdl.Color{R: 255, G: 0, B: 0, A: 255})
+		// statusLabel.SetForeground(&sdl.Color{R: 255, G: 0, B: 0, A: 255})
 		statusGroup.SetVisible(true)
+		statusLabel.SetError(true)
 		statusLabel.SetText(fmt.Sprintf("%d: %s", l, s))
 	}
 }
