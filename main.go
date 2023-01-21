@@ -51,13 +51,11 @@ const (
 )
 
 var (
-	resources           string = "resources"
 	winTitle            string = "Go-SDL2 Render"
 	winWidth, winHeight int32  = 900, 900
 	displayMode         sdl.DisplayMode
 	statusLabel         *widgets.SDL_Label
 	statusGroup         *widgets.SDL_WidgetSubGroup
-	fontSize            int                    = 50
 	mouseData           *widgets.SDL_MouseData = &widgets.SDL_MouseData{}
 
 	mouseOn            = false
@@ -74,6 +72,8 @@ var (
 	lifeGenTime  uint64
 	loopDelay    uint64 = 0
 	rleFile      *go_life.RLE
+
+	buttonBarColour *sdl.Color
 
 	// Set and scaled via the scaleEverything method
 	viewport           sdl.Rect
@@ -113,10 +113,9 @@ func run() int {
 	if err == nil {
 		displayMode, err = sdl.GetCurrentDisplayMode(index)
 		if err == nil {
-			fmt.Printf("Window W:%d H:%d \n", displayMode.W, displayMode.H)
 			window.SetSize(displayMode.W, displayMode.H)
 		} else {
-			fmt.Fprintf(os.Stderr, "Failed to obtain displa mode: %s\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to obtain display mode: %s\n", err)
 			return 2
 		}
 	}
@@ -127,18 +126,82 @@ func run() int {
 		return 3
 	}
 	defer renderer.Destroy()
-	err = widgets.GetResourceInstance().Config("config.properties")
+
+	// Define the default buttonBarColour.
+	// Get it with GetColourName("buttonBarColour", widgets.WIDGET_COLOUR_INDEX_ENABLED, widgets.WIDGET_COLOUR_STYLE_BG)
+	//
+	// After config has loaded. Config may override these values
+	err = widgets.GetResourceInstance().SetColourName("buttonBarColour", &sdl.Color{R: 0, G: 78, B: 0, A: 255})
 	if err != nil {
-		fmt.Printf("Config Error: %s", err.Error())
+		fmt.Fprintf(os.Stderr, "Resource Error: %s", err.Error())
 		return 1
 	}
-	widgets.GetResourceInstance().LoadFont(path.Join(resources, "buttonFont.ttf"), fontSize)
+
+	err = widgets.GetResourceInstance().SetFontFilename("buttonFont.ttf")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Resource Error: %s", err.Error())
+		return 1
+	}
+
+	err = widgets.GetResourceInstance().SetFontSize(50)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Resource Error: %s", err.Error())
+		return 1
+	}
+
+	// Load config data
+	// May override colours and theme settings held in the Resources object
+	err = widgets.GetResourceInstance().Config("config.properties")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Config Error: %s", err.Error())
+		return 1
+	}
+
+	// Get the buttonBarColour. Use ENABLED BG if not defined
+	buttonBarColour = widgets.GetResourceInstance().GetColourName("buttonBarColour", widgets.WIDGET_COLOUR_INDEX_ENABLED, widgets.WIDGET_COLOUR_STYLE_BG)
+
+	err = widgets.GetResourceInstance().LoadFont()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Load Error: %s", err.Error())
+		return 1
+	}
+
+	// Load image resources
+	err = widgets.GetResourceInstance().AddTexturesFromFileMap(renderer, map[string]string{
+		"lem":         "lem.png",
+		"slower":      "slower.png",
+		"faster":      "faster.png",
+		"fastest":     "fastest.png",
+		"zoomin":      "zoom-in.png",
+		"zoomout":     "zoom-out.png",
+		"fileload":    "file-load.png",
+		"ButtonImage": "ButtonImage.png",
+	}, &sdl.Color{R: 255, G: 255, B: 255, A: 255}, widgets.GetResourceInstance().GetColour(widgets.WIDGET_COLOUR_INDEX_ENABLED, widgets.WIDGET_COLOUR_STYLE_FG))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load file textures: %s\n", err)
+		return 1
+	}
+
+	err = widgets.GetResourceInstance().AddTexturesFromFileMap(renderer, map[string]string{
+		"slower.dis":      "slower.png",
+		"faster.dis":      "faster.png",
+		"fastest.dis":     "fastest.png",
+		"zoomin.dis":      "zoom-in.png",
+		"zoomout.dis":     "zoom-out.png",
+		"ButtonImage.dis": "ButtonImage.png",
+	}, &sdl.Color{R: 255, G: 255, B: 255, A: 255}, widgets.GetResourceInstance().GetColour(widgets.WIDGET_COLOUR_INDEX_DISABLE, widgets.WIDGET_COLOUR_STYLE_FG))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load file textures (.dis): %s\n", err)
+		return 1
+	}
+
 	defer widgets.GetResourceInstance().Destroy()
+
 	running := true
 
 	err = loadRleFile("testdata/1234_synth.rle")
 	if err != nil {
-		fmt.Printf("Unable to load file %e", err)
+		fmt.Fprintf(os.Stderr, "Unable to load file %e", err)
 	}
 	viewport = renderer.GetViewport()
 	cellOffsetX, cellOffsetY = centerOnXY(viewport.W/2, viewport.H/2, lifeGen)
@@ -154,35 +217,6 @@ func run() int {
 	buttonsTR := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_TOP_RIGHT, widgets.WIDGET_STYLE_DRAW_NONE)
 	buttonsTL := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_TOP_LEFT, widgets.WIDGET_STYLE_DRAW_NONE)
 	arrows := widgetGroup.NewWidgetSubGroup(0, 0, 0, 0, LIST_ARROWS, widgets.WIDGET_STYLE_DRAW_NONE)
-
-	// Load image resources
-	err = widgets.GetResourceInstance().AddTexturesFromFileMap(renderer, resources, map[string]string{
-		"lem":         "lem.png",
-		"slower":      "slower.png",
-		"faster":      "faster.png",
-		"fastest":     "fastest.png",
-		"zoomin":      "zoom-in.png",
-		"zoomout":     "zoom-out.png",
-		"fileload":    "file-load.png",
-		"ButtonImage": "ButtonImage.png",
-	}, &sdl.Color{R: 255, G: 255, B: 255, A: 255}, widgets.GetResourceInstance().GetColour(widgets.WIDGET_COLOUR_INDEX_ENABLED, widgets.WIDGET_COLOUR_STYLE_FG))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load file textures: %s\n", err)
-		return 1
-	}
-
-	err = widgets.GetResourceInstance().AddTexturesFromFileMap(renderer, resources, map[string]string{
-		"slower.dis":      "slower.png",
-		"faster.dis":      "faster.png",
-		"fastest.dis":     "fastest.png",
-		"zoomin.dis":      "zoom-in.png",
-		"zoomout.dis":     "zoom-out.png",
-		"ButtonImage.dis": "ButtonImage.png",
-	}, &sdl.Color{R: 255, G: 255, B: 255, A: 255}, widgets.GetResourceInstance().GetColour(widgets.WIDGET_COLOUR_INDEX_DISABLE, widgets.WIDGET_COLOUR_STYLE_FG))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load file textures (.dis): %s\n", err)
-		return 1
-	}
 
 	btnClose := widgets.NewSDLButton(0, 0, 0, 0, BUTTON_CLOSE, "Exit", widgets.WIDGET_STYLE_DRAW_NONE, 0, func(s string, b, i1, i2 int32) bool {
 		running = false
@@ -417,7 +451,8 @@ func run() int {
 		}
 		renderer.SetDrawColor(0, 0, 0, 255)
 		renderer.Clear()
-		renderer.SetDrawColor(0, 78, 0, 255)
+
+		renderer.SetDrawColor(buttonBarColour.R, buttonBarColour.G, buttonBarColour.B, buttonBarColour.A)
 		renderer.FillRect(&sdl.Rect{X: 0, Y: 0, W: viewport.W, H: btnTopMarginHeight})
 		renderer.SetDrawColor(0, 255, 255, 255)
 		cell := lifeGen.GetRootCell()
@@ -569,7 +604,6 @@ func setErrorStatus(e error) {
 		statusGroup.SetVisible(false)
 	} else {
 		s := strings.TrimPrefix(e.Error(), "stat ")
-		// statusLabel.SetForeground(&sdl.Color{R: 255, G: 0, B: 0, A: 255})
 		statusGroup.SetVisible(true)
 		statusLabel.SetError(true)
 		statusLabel.SetText(s)
@@ -580,7 +614,6 @@ func setStatus(l widgets.LOG_LEVEL, s string) {
 	if s == "" {
 		statusGroup.SetVisible(false)
 	} else {
-		// statusLabel.SetForeground(&sdl.Color{R: 255, G: 0, B: 0, A: 255})
 		statusGroup.SetVisible(true)
 		statusLabel.SetError(true)
 		statusLabel.SetText(fmt.Sprintf("%d: %s", l, s))
